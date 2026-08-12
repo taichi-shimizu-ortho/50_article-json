@@ -1,0 +1,10 @@
+{
+  "cacheKey": "a2765694dbe48a3fef91f301bcdf2ca4",
+  "pass": "paragraph",
+  "savedAt": "2026-08-12T01:56:31.695Z",
+  "data": {
+    "role": "limitation",
+    "gist": "Limitations: small animal numbers (4-week OARSI only trended), single injection at a single time point, single human donor for both products, and author ties to the BMAX company, mitigated by blinding and independent site.",
+    "plain": "The authors list constraints: few animals, so some outcomes only trended (cartilage scores were significant at 8 weeks but not 4); treatment was given once, 4 weeks after surgery, with no other timings or repeat dosing tested; and both products came from one human donor, so donor variability in MSC content and matrix composition limits generalizability. They also disclose that some co-authors have relationships with the BMAX developer, noting the animal work was done at an independent institution with a conflict-free injecting surgeon and blinded assessors, but say external validation is still needed. They maintain that within these conditions the ECM-retaining product consistently outperformed BMAC."
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "cacheKey": "c88ac9618a94c4129414febde242d88a",
+  "pass": "paragraph",
+  "savedAt": "2026-08-12T01:49:05.592Z",
+  "data": {
+    "role": "method",
+    "gist": "Flow cytometry confirmed MSC identity per ISCT criteria (CD34/45/11b/19/HLA-DR negative; CD73/90/105 positive) and tracked CD45−/CD146+ pericyte phenotype through passages 0–2.",
+    "plain": "The cultured cells from both preparations were checked by flow cytometry (a laser-based cell-labeling method) against the standard international marker panel defining mesenchymal stromal cells, using at least 10,000 cells and isotype antibodies as negative controls to set gates. Cells were also stained for CD45 and CD146 at passages 0, 1 and 2 to quantify the pericyte-like subpopulation."
+  }
+}

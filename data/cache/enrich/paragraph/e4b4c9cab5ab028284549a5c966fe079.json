@@ -1,0 +1,10 @@
+{
+  "cacheKey": "e4b4c9cab5ab028284549a5c966fe079",
+  "pass": "paragraph",
+  "savedAt": "2026-08-12T01:56:12.227Z",
+  "data": {
+    "role": "method",
+    "gist": "Statistics: mean ± SD in GraphPad Prism; repeated-measures two-way ANOVA for pain over time, one-way ANOVA with Tukey for ≥3 groups, Mann–Whitney for two groups, p<0.05.",
+    "plain": "The authors describe their statistical approach, checking whether data were normally distributed and switching to non-parametric tests when not. Pain measures repeated in the same animals used repeated-measures ANOVA; comparisons of three or more groups used one-way ANOVA with Tukey correction, and two-group comparisons used Mann–Whitney."
+  }
+}

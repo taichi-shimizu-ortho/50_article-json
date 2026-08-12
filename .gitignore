@@ -1,0 +1,24 @@
+node_modules/
+
+# API キー。git に入れない。
+.env
+.env.*
+!.env.example
+
+.DS_Store
+
+# 再配布できない論文の隔離先。**丸ごと除外する。**
+# .gitignore のパターンで守るのではなく、追跡対象パスの外に物理的に置く。
+# パターンだと git add -f や設定変更で静かに漏れるが、パスの外なら入りようがない。
+# どの論文がここに来るかは data/corpus.json とライセンス判定 (npm run corpus) が決める。
+data/private/
+
+# 図版。配信元から取り直せるうえ、ライセンスが論文ごとに違う
+# (PMC の OA サービスで cells15141249 は CC BY、PMC3143999 は license="none")。
+# バイナリを履歴に残す利点がないので外す。npm run figures で再取得できる。
+data/figures/
+
+# 以下は **意図的に git 管理下に置く** (README の「データ管理」を参照)
+#   data/raw/       小さく不変。パース結果を再現するための入力
+#   data/articles/  enrich 後は LLM 課金の成果物。失うと金銭的損失
+#   data/cache/     再課金を避けるためのキャッシュ。巨大化したら外す

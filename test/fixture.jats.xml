@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<article xmlns:xlink="http://www.w3.org/1999/xlink" article-type="research-article">
+  <front>
+    <journal-meta>
+      <journal-id journal-id-type="publisher-id">cells</journal-id>
+      <journal-title-group>
+        <journal-title>Cells</journal-title>
+      </journal-title-group>
+      <issn pub-type="epub">2073-4409</issn>
+      <publisher>
+        <publisher-name>MDPI</publisher-name>
+      </publisher>
+    </journal-meta>
+    <article-meta>
+      <article-id pub-id-type="doi">10.3390/cells15141249</article-id>
+      <article-id pub-id-type="pmid">42505359</article-id>
+      <title-group>
+        <article-title>Preclinical Evaluation of Human Donor-Derived Micronized Bone
+          Marrow Stroma/Parenchyma Versus Bone Marrow Aspirate Concentrate in a Rat
+          Model of Post-Traumatic Knee Osteoarthritis</article-title>
+      </title-group>
+      <contrib-group>
+        <contrib contrib-type="author">
+          <contrib-id contrib-id-type="orcid">0000-0002-5070-1185</contrib-id>
+          <name><surname>Nishimura</surname><given-names>Haruki</given-names></name>
+          <xref ref-type="aff" rid="aff1">1</xref>
+        </contrib>
+        <contrib contrib-type="author">
+          <name><surname>Xiao</surname><given-names>Zuokui</given-names></name>
+          <xref ref-type="aff" rid="aff1">1</xref>
+        </contrib>
+        <contrib contrib-type="author" corresp="yes">
+          <name><surname>Huard</surname><given-names>Johnny</given-names></name>
+          <xref ref-type="aff" rid="aff1">1</xref>
+        </contrib>
+        <aff id="aff1"><label>1</label>The Steadman Philippon Research Institute,
+          Vail, CO 81657, USA</aff>
+        <aff id="aff2"><label>2</label>BMAX Medical LLC, Johnstown, CO 80534, USA</aff>
+      </contrib-group>
+      <pub-date pub-type="epub">
+        <day>10</day><month>7</month><year>2026</year>
+      </pub-date>
+      <volume>15</volume>
+      <issue>14</issue>
+      <fpage>1249</fpage>
+      <permissions>
+        <license xlink:href="https://creativecommons.org/licenses/by/4.0/">
+          <license-p>This is an open access article distributed under the
+            Creative Commons Attribution License.</license-p>
+        </license>
+      </permissions>
+      <abstract>
+        <p>Bone marrow aspirate concentrate (BMAC) is widely used as a source of
+          mesenchymal stromal/stem cells (MSCs); however, BMAC lacks essential bone
+          marrow extracellular matrix (ECM) components. At 4 weeks after treatment,
+          BMAC significantly increased the paw withdrawal threshold compared with PBS
+          (<italic>p</italic> = 0.0068), whereas BMAX™ significantly reduced knee joint
+          swelling compared with both PBS (<italic>p</italic> = 0.0235) and BMAC
+          (<italic>p</italic> = 0.0039). Flow cytometry identified CD73<sup>+</sup>
+          CD90<sup>+</sup>/CD105<sup>+</sup>/CD45<sup>−</sup> populations. Cells were
+          cultured at 37 °C in 5% CO<sub>2</sub>.</p>
+      </abstract>
+      <kwd-group>
+        <kwd>mesenchymal stromal cells</kwd>
+        <kwd>bone marrow niche</kwd>
+        <kwd>osteoarthritis</kwd>
+      </kwd-group>
+    </article-meta>
+  </front>
+
+  <body>
+    <sec id="sec1-cells-15-01249">
+      <title>1. Introduction</title>
+      <p>Mesenchymal stem cells (MSCs) are multipotent progenitor cells capable of
+        differentiating into adipocytes, osteoblasts, and chondrocytes. Bone marrow
+        aspirate concentrate (BMAC) has gained popularity as an autologous MSC source
+        for a wide range of regenerative medicine applications, including knee
+        osteoarthritis (OA)
+        [<xref ref-type="bibr" rid="B1-cells-15-01249">1</xref>,<xref
+          ref-type="bibr" rid="B2-cells-15-01249">2</xref>,<xref
+          ref-type="bibr" rid="B3-cells-15-01249">3</xref>].</p>
+      <p>However, MSCs are inherently rare in bone marrow aspirate, comprising
+        approximately 0.001% to 0.01% of total nucleated cells
+        [<xref ref-type="bibr" rid="B13-cells-15-01249 B14-cells-15-01249">13,14</xref>].
+        Whether this tissue-preserving approach yields greater therapeutic efficacy
+        in vivo has not been directly tested.</p>
+    </sec>
+
+    <sec id="sec2-cells-15-01249">
+      <title>2. Materials and Methods</title>
+      <sec id="sec2dot1-cells-15-01249">
+        <title>2.1. Human Bone Marrow Collection and Preparation</title>
+        <p>Bone marrow subcortical bone cores and aspirate were obtained from a single
+          consented 50-year-old female donor (BMI 19.5). Aspirate was anticoagulated
+          with preservative-free heparin at a final concentration of 10 U/mL.</p>
+      </sec>
+      <sec id="sec2dot2-cells-15-01249">
+        <title>2.2. Flow Cytometry</title>
+        <p>MSCs were identified via flow cytometry following the ISCT minimal criteria
+          [<xref ref-type="bibr" rid="B21-cells-15-01249">21</xref>] as previously
+          described: CD34<sup>−</sup>, CD45<sup>−</sup>, CD73<sup>+</sup>,
+          CD90<sup>+</sup>, CD105<sup>+</sup>. See
+          <xref ref-type="fig" rid="cells-15-01249-f002">Figure 2</xref> for the
+          gating strategy. Full protocols are available at
+          <ext-link ext-link-type="uri"
+            xlink:href="https://example.org/protocol">the study repository</ext-link>.</p>
+      </sec>
+      <sec id="sec2dot3-cells-15-01249">
+        <title>2.3. Statistical Analysis</title>
+        <p>Results are presented as mean ± SD. A <italic>p</italic>-value of less than
+          0.05 was considered statistically significant. The effect size was computed as
+          <inline-formula><tex-math id="mm1">d = (\mu_1 - \mu_2)/\sigma</tex-math></inline-formula>
+          for the primary comparison.</p>
+      </sec>
+    </sec>
+
+    <sec id="sec3-cells-15-01249">
+      <title>3. Results</title>
+      <sec id="sec3dot1-cells-15-01249">
+        <title>3.1. BMAX Cells Favor Pericyte Expansion During Culture</title>
+        <p>We found adhering cells from BMAX formed more colonies in 14 days
+          (<xref ref-type="fig" rid="cells-15-01249-f002">Figure 2</xref>A,B). The
+          percentage of CD146<sup>+</sup>CD45<sup>−</sup> cells increased over passages
+          and significantly increased at P2 compared to BMAC-derived adhering cells
+          (<italic>p</italic> = 0.0446).</p>
+        <fig id="cells-15-01249-f002">
+          <label>Figure 2</label>
+          <caption>
+            <p>Characterization of micronized bone marrow cells. (<bold>A</bold>,<bold>B</bold>)
+              Representative CFU-F assay images. Significant difference:
+              * <italic>p</italic> &lt; 0.05. ns: not significant.</p>
+          </caption>
+          <graphic xlink:href="cells-15-01249-g002.png"/>
+        </fig>
+      </sec>
+      <sec id="sec3dot2-cells-15-01249">
+        <title>3.2. Improved Pain-Related Behaviors After DMM Surgery</title>
+        <p>In the knee-bend assay, BMAX™ significantly reduced movement-evoked pain
+          versus PBS at both 4 and 8 weeks post-injection (<italic>p</italic> = 0.0011
+          and <italic>p</italic> = 0.0027), as did BMAC at 8 weeks
+          (<italic>p</italic> = 0.0255)
+          (<xref ref-type="table" rid="cells-15-01249-t002">Table 2</xref>,
+          <xref ref-type="fig" rid="cells-15-01249-f004">Figure 4</xref>B).</p>
+        <table-wrap id="cells-15-01249-t002">
+          <label>Table 2</label>
+          <caption><p>Knee-bend scores by treatment group.</p></caption>
+          <table>
+            <thead>
+              <tr><th>Group</th><th>4 weeks</th><th>8 weeks</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>PBS</td><td>12.4 ± 2.1</td><td>14.8 ± 2.6</td></tr>
+              <tr><td>BMAC</td><td>10.9 ± 1.8</td><td>9.6 ± 2.0</td></tr>
+              <tr><td>BMAX™</td><td>7.2 ± 1.5</td><td>5.1 ± 1.4</td></tr>
+            </tbody>
+          </table>
+          <table-wrap-foot>
+            <fn><p>Data are presented as mean ± SD.</p></fn>
+          </table-wrap-foot>
+        </table-wrap>
+      </sec>
+    </sec>
+
+    <sec id="sec4-cells-15-01249">
+      <title>4. Discussion</title>
+      <p>BMAC is widely used to deliver MSCs to affected tissues with positive clinical
+        outcomes
+        [<xref ref-type="bibr" rid="B30-cells-15-01249">30</xref>,<xref
+          ref-type="bibr" rid="B31-cells-15-01249">31</xref>]. Capturing this
+        bone-associated MSC population may contribute to the greater adherence observed
+        here.</p>
+      <p>This study did have limitations. First, the number of animals was relatively
+        small, which may have limited the statistical power to detect differences for
+        some outcome measures. Second, both preparations were derived from a single
+        human donor, so the generalizability of our findings remains to be
+        established.</p>
+    </sec>
+
+    <sec id="sec5-cells-15-01249">
+      <title>5. Conclusions</title>
+      <p>This study demonstrates that retention of native extracellular matrix within a
+        micronized bone marrow preparation enhances the therapeutic potential of bone
+        marrow-derived cell therapy in a preclinical OA model.</p>
+    </sec>
+  </body>
+
+  <back>
+    <sec id="funding">
+      <title>Funding</title>
+      <p>This study was supported by the Colorado Office of Economic Development.</p>
+    </sec>
+    <sec id="coi">
+      <title>Conflicts of Interest</title>
+      <p>JD is the owner of BMAX Medical LLC. HN declares no competing interests.</p>
+    </sec>
+    <ref-list>
+      <ref id="B1-cells-15-01249">
+        <label>1.</label>
+        <element-citation publication-type="journal">
+          <person-group person-group-type="author">
+            <name><surname>Anil</surname><given-names>U.</given-names></name>
+            <name><surname>Markus</surname><given-names>D.H.</given-names></name>
+          </person-group>
+          <article-title>The efficacy of intra-articular injections in the treatment of
+            knee osteoarthritis: A network meta-analysis</article-title>
+          <source>Knee</source>
+          <year>2021</year>
+          <volume>32</volume>
+          <fpage>173</fpage>
+          <lpage>182</lpage>
+          <pub-id pub-id-type="doi">10.1016/j.knee.2021.08.008</pub-id>
+          <pub-id pub-id-type="pmid">34500430</pub-id>
+        </element-citation>
+      </ref>
+      <ref id="B2-cells-15-01249">
+        <label>2.</label>
+        <mixed-citation publication-type="journal">Cavallo, C.; Boffa, A. Bone marrow
+          concentrate injections for the treatment of osteoarthritis.
+          <source>Int. Orthop.</source> <year>2021</year>, 45, 525–538.</mixed-citation>
+      </ref>
+      <ref id="B21-cells-15-01249">
+        <label>21.</label>
+        <element-citation publication-type="journal">
+          <person-group person-group-type="author">
+            <name><surname>Dominici</surname><given-names>M.</given-names></name>
+          </person-group>
+          <article-title>Minimal criteria for defining multipotent mesenchymal stromal
+            cells</article-title>
+          <source>Cytotherapy</source>
+          <year>2006</year>
+          <volume>8</volume>
+          <fpage>315</fpage>
+          <lpage>317</lpage>
+          <pub-id pub-id-type="doi">10.1080/14653240600855905</pub-id>
+        </element-citation>
+      </ref>
+    </ref-list>
+  </back>
+</article>

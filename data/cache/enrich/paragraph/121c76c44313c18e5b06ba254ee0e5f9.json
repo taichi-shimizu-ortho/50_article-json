@@ -1,0 +1,10 @@
+{
+  "cacheKey": "121c76c44313c18e5b06ba254ee0e5f9",
+  "pass": "paragraph",
+  "savedAt": "2026-08-12T01:56:12.228Z",
+  "data": {
+    "role": "result",
+    "gist": "Both treatments improved pain measures versus PBS; BMAX significantly lowered knee-bend pain at 4 and 8 weeks and scored better than BMAC at 8 weeks (p=0.0090), with post hoc power 0.940 (d=2.40).",
+    "plain": "Pain was measured by paw sensitivity to filaments (von Frey) and by responses to knee bending. Both products raised pain thresholds relative to saline, though which one reached statistical significance varied by timepoint, and they did not differ from each other on von Frey. On movement-evoked pain, BMAX outperformed saline at both timepoints and was significantly better than BMAC at 8 weeks; a post hoc power calculation for that comparison gave 0.940."
+  }
+}

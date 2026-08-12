@@ -1,0 +1,32 @@
+{
+  "name": "article-json",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "verify": "tsx test/verify.ts && tsx test/sentences.ts && tsx test/enrich.ts",
+    "build": "tsx src/ingest/buildJson.ts",
+    "enrich": "tsx src/enrich/runEnrich.ts",
+    "show": "tsx src/tools/show.ts",
+    "typecheck": "tsc --noEmit",
+    "serve": "tsx src/viewer/server.ts",
+    "figures": "tsx src/tools/fetchFigures.ts",
+    "corpus": "tsx src/tools/corpus.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.116.0",
+    "@xmldom/xmldom": "^0.9.10"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "tsx": "^4.23.10",
+    "typescript": "^7.0.2"
+  },
+  "type": "module"
+}

@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>article-json viewer</title>
+<style>
+  :root {
+    --bg: #fbfaf8; --fg: #1c1a17; --muted: #6d675e; --line: #e2ded6;
+    --panel: #fff; --accent: #7a5c3e;
+    --measured: #1f6f43; --supported: #4a4a4a; --hedged: #a8681a; --speculative: #a33a3a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #171614; --fg: #e8e4dd; --muted: #9a938a; --line: #34312c;
+      --panel: #1f1e1b; --accent: #c9a27a;
+      --measured: #6dc294; --supported: #a5a09a; --hedged: #e0a559; --speculative: #e07a7a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.75 -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10; background: var(--panel);
+    border-bottom: 1px solid var(--line); padding: 10px 20px;
+    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+  }
+  select, button {
+    font: inherit; padding: 5px 9px; border: 1px solid var(--line);
+    border-radius: 6px; background: var(--bg); color: var(--fg);
+  }
+  /* 論文名は長い。幅が足りないときは select 側を縮める (min-width:0 が無いと
+     flex アイテムは中身の幅より縮まず、ヘッダーごと横にはみ出す)。 */
+  #pickLabel { display: flex; align-items: center; gap: 6px; flex: 1 1 280px; min-width: 0; }
+  select { flex: 1; min-width: 0; }
+  button { cursor: pointer; }
+  button[aria-pressed="true"] { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+  main { max-width: 820px; margin: 0 auto; padding: 24px 20px 120px; }
+  h1 { font-size: 21px; line-height: 1.5; margin: 0 0 6px; }
+  .meta { color: var(--muted); font-size: 13px; margin-bottom: 26px; }
+  .meta a { color: inherit; }
+  h2 {
+    font-size: 15px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--accent); margin: 34px 0 4px; border-bottom: 1px solid var(--line);
+    padding-bottom: 4px;
+  }
+  h3 { font-size: 14px; color: var(--muted); margin: 22px 0 2px; font-weight: 600; }
+  .para { margin: 18px 0; }
+  .pid { font: 11px/1 ui-monospace, monospace; color: var(--muted); }
+  .role {
+    font: 11px/1 ui-monospace, monospace; color: var(--panel); background: var(--muted);
+    border-radius: 3px; padding: 2px 5px; margin-left: 6px;
+  }
+  .gist { font-weight: 600; margin: 3px 0; }
+  .plain { color: var(--muted); border-left: 2px solid var(--line); padding-left: 10px; margin: 3px 0; }
+  .body { margin-top: 6px; }
+  .body.dim { color: var(--muted); font-size: 14px; }
+  /* 文単位の色付けは「控えめ」が正解。複数行の文を丸ごと下線にすると
+     全部リンクのように見え、主役であるはずの hedge が埋もれる。
+     measured は点線、留保のある文だけ淡い地色にする。 */
+  .s.measured    { border-bottom: 1px dotted var(--measured); }
+  .s.hedged      { background: color-mix(in srgb, var(--hedged) 10%, transparent); }
+  .s.speculative { background: color-mix(in srgb, var(--speculative) 13%, transparent); }
+  .hedge {
+    background: color-mix(in srgb, var(--hedged) 30%, transparent);
+    border-radius: 3px; padding: 0 1px;
+  }
+  /* 引用番号。上付きで小さく、本文の流れを乱さない程度に色を付ける。 */
+  a.ref {
+    color: var(--accent); text-decoration: none; font-size: .82em;
+    vertical-align: super; line-height: 0; padding: 0 1px; cursor: pointer;
+  }
+  a.ref:hover { text-decoration: underline; }
+  a.ref.dead { color: var(--muted); cursor: default; }
+  #tip {
+    position: fixed; z-index: 50; max-width: 420px; display: none;
+    background: var(--panel); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.55;
+    box-shadow: 0 6px 24px rgba(0,0,0,.18);
+  }
+  #tip .t { font-weight: 600; margin: 2px 0 4px; }
+  #tip .a, #tip .s { color: var(--muted); }
+  #tip .go { color: var(--accent); font-size: 12px; margin-top: 6px; }
+  figure {
+    margin: 22px 0; padding: 12px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--panel);
+  }
+  figure img {
+    display: block; width: 100%; height: auto; border-radius: 4px;
+    background: #fff; /* 透過 PNG が暗色テーマで潰れないように */
+  }
+  figcaption { color: var(--muted); font-size: 13px; line-height: 1.6; margin-top: 8px; }
+  figcaption b { color: var(--fg); }
+  .figmissing {
+    color: var(--muted); font-size: 13px; border: 1px dashed var(--line);
+    border-radius: 4px; padding: 14px; text-align: center;
+  }
+  .figmissing code { font-size: 12px; }
+  /* 表は横に長くなる。ページ全体を横スクロールさせず、表の中だけで収める。 */
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; font-size: 13px; min-width: 100%; }
+  th, td {
+    border-bottom: 1px solid var(--line); padding: 6px 10px;
+    text-align: left; vertical-align: top; white-space: nowrap;
+  }
+  thead th { border-bottom: 2px solid var(--line); font-weight: 600; color: var(--fg); }
+  tbody tr:last-child td { border-bottom: 0; }
+  /* 1 列目は行見出しとして読むことが多い */
+  tbody td:first-child { color: var(--fg); font-weight: 500; }
+  .fnote { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .legend { color: var(--muted); font-size: 12px; margin-left: auto; }
+  .legend i { font-style: normal; border-bottom: 2px solid; padding-bottom: 1px; margin-left: 10px; }
+  .empty { color: var(--muted); padding: 40px 0; }
+</style>
+</head>
+<body>
+<header>
+  <label id="pickLabel">Article <select id="pick"></select></label>
+  <button id="toggleBody" aria-pressed="true">Full text</button>
+  <button id="togglePlain" aria-pressed="true">Plain</button>
+  <button id="toggleFigs" aria-pressed="true">Figures</button>
+  <button id="toggleTables" aria-pressed="true">Tables</button>
+  <span class="legend" id="legend"></span>
+</header>
+<main id="out"><p class="empty">Loading…</p></main>
+<div id="tip"></div>
+
+<script type="module">
+const $ = (s) => document.querySelector(s);
+const pick = $("#pick"), out = $("#out");
+let showBody = true, showPlain = true, showFigs = true, showTables = true, current = null;
+
+/* 図版と表。article.figures / article.tables は本文ツリーの外にあるので、
+   レンダリング中に「それを最初に参照した段落」の直後へ差し込む。
+   どこからも参照されないものは末尾にまとめる (落とさない)。 */
+let figIndex = new Map();   // xmlId -> figure
+let figPlaced = new Set();  // 既に出した xmlId (同じ図を二度出さない)
+let tabIndex = new Map();
+let tabPlaced = new Set();
+let refIndex = new Map();   // xmlId -> reference
+
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+/**
+ * 文献のリンク先。**PubMed を優先し、無ければ DOI。**
+ * 実データでは 58 件中 45 件に PMID、残り 7 件は DOI のみ (両方無しは 0)。
+ */
+function refHref(r) {
+  if (!r) return null;
+  if (r.pmid) return `https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(r.pmid)}/`;
+  if (r.doi) return `https://doi.org/${encodeURIComponent(r.doi)}`;
+  return null;
+}
+
+/**
+ * 段落に重ねる装飾を 1 本のリストにまとめる。
+ *
+ * hedge (文パス由来) と引用番号 (marks 由来) は**別々の由来だが同じ座標系**に
+ * 乗っている。片方ずつ挿入するとオフセットが狂うので、先に統合して
+ * 重なりを落としてから 1 回で流し込む。実際には重ならないはずだが、
+ * 重なったときに壊れるより落としたほうがいい。
+ */
+function decorations(p) {
+  const out = [];
+  for (const s of p.sentences ?? []) {
+    for (const [a, b] of s.hedges ?? []) out.push({ a, b, kind: "hedge" });
+  }
+  for (const m of p.marks ?? []) {
+    // 図表への xref は文献ではない
+    if (m.type === "xref" && m.refType === "bibr") {
+      out.push({ a: m.span[0], b: m.span[1], kind: "ref", rid: m.rid });
+    }
+  }
+  out.sort((x, y) => x.a - y.a || y.b - x.b);
+  const kept = [];
+  let end = -1;
+  for (const d of out) {
+    if (d.a < end || d.b <= d.a) continue;
+    kept.push(d);
+    end = d.b;
+  }
+  return kept;
+}
+
+function renderDecoration(d, text) {
+  if (d.kind === "hedge") return `<span class="hedge">${esc(text)}</span>`;
+  const r = refIndex.get(d.rid);
+  const href = refHref(r);
+  return href
+    ? `<a class="ref" href="${href}" target="_blank" rel="noopener" data-rid="${esc(d.rid ?? "")}">${esc(text)}</a>`
+    : `<a class="ref dead" data-rid="${esc(d.rid ?? "")}">${esc(text)}</a>`;
+}
+
+/** 段落テキストを文ごとに切り、certainty / hedge / 引用リンクを重ねる */
+function renderText(p) {
+  const decos = decorations(p);
+  const paint = (from, to) => {
+    let s = "";
+    let c = from;
+    for (const d of decos) {
+      if (d.a < c || d.b > to) continue;
+      s += esc(p.text.slice(c, d.a)) + renderDecoration(d, p.text.slice(d.a, d.b));
+      c = d.b;
+    }
+    return s + esc(p.text.slice(c, to));
+  };
+
+  if (!p.sentences?.length) return paint(0, p.text.length);
+
+  let html = "";
+  let cursor = 0;
+  for (const s of p.sentences) {
+    if (s.span[0] > cursor) html += paint(cursor, s.span[0]);
+    const inner = paint(s.span[0], s.span[1]);
+    html += s.certainty
+      ? `<span class="s ${s.certainty}" title="${s.certainty}">${inner}</span>`
+      : `<span class="s">${inner}</span>`;
+    cursor = s.span[1];
+  }
+  return html + paint(cursor, p.text.length);
+}
+
+/**
+ * PMC 上の図版 URL。**ここだけが配信元を知っている。**
+ * パターンが変わったらこの関数を直す。
+ */
+function pmcImageUrl(pmcid, name) {
+  const numeric = String(pmcid).replace(/^PMC/i, "");
+  return `https://pmc.ncbi.nlm.nih.gov/articles/instance/${numeric}/bin/${name}`;
+}
+
+/** .tif はブラウザで開けない。PMC は変換済みの .jpg を持っている。 */
+const displayName = (href) => href.replace(/\.tiff?$/i, ".jpg");
+
+/**
+ * 図 1 枚。取得元は 3 段階に落とす。
+ *
+ *   1. data/figures/ のローカルファイル (npm run figures で取れたもの)
+ *   2. PMC から直接 (ローカルに無いとき)
+ *   3. キャプションだけ
+ *
+ * 2 を持っているのは、スクリプト側の取得が PMC の bot 検知 (reCAPTCHA) に
+ * 当たって落ちることがあるため。**ブラウザが自分で読みに行くぶんには通る** —
+ * PMC のサイト自体がそうやって表示している。ローカルに置ければオフラインでも
+ * 読めるので 1 を優先し、落ちた分だけ 2 で埋める。
+ */
+function renderFigure(fig, articleId, pmcid) {
+  const cap =
+    `<figcaption>${fig.label ? `<b>${esc(fig.label)}.</b> ` : ""}${esc(fig.caption ?? "")}</figcaption>`;
+
+  const local = new Set(fig.files ?? []);
+  const names = (fig.graphics ?? []).map(displayName);
+  const sources = names.map((n) => ({
+    name: n,
+    src: local.has(n)
+      ? `/figures/${encodeURIComponent(articleId)}/${encodeURIComponent(n)}`
+      : pmcid
+        ? pmcImageUrl(pmcid, n)
+        : null,
+    remote: !local.has(n),
+  })).filter((s) => s.src);
+
+  if (sources.length === 0) {
+    return `<figure><div class="figmissing">` +
+      `No image source — <code>${esc((fig.graphics ?? []).join(", "))}</code></div>${cap}</figure>`;
+  }
+
+  const imgs = sources.map((s) =>
+    // 原寸で見たいことがあるので新しいタブへのリンクにしておく
+    `<a href="${s.src}" target="_blank" rel="noopener">` +
+      `<img src="${s.src}" alt="${esc(fig.label ?? "figure")}" loading="lazy"` +
+      `${s.remote ? ' data-remote="1"' : ""}></a>`,
+  ).join("");
+  const note = sources.some((s) => s.remote)
+    ? `<figcaption style="opacity:.7">loaded from PMC (not cached locally)</figcaption>`
+    : "";
+  return `<figure>${imgs}${cap}${note}</figure>`;
+}
+
+/**
+ * 表 1 つ。
+ *
+ * `rows` は thead/tbody を平坦化したものなので、見出し行は `headerRows` の
+ * 行数だけ先頭から取る。**先頭行を見出しと決め打ちしない** — 見出しの無い表が
+ * あるし、2 行にわたる表もある。
+ */
+function renderTable(t) {
+  const head = Math.max(0, Math.min(t.headerRows ?? 0, (t.rows ?? []).length));
+  const cell = (tag, v) => `<${tag}>${esc(v ?? "")}</${tag}>`;
+  const thead = head > 0
+    ? `<thead>${t.rows.slice(0, head)
+        .map((r) => `<tr>${r.map((c) => cell("th", c)).join("")}</tr>`).join("")}</thead>`
+    : "";
+  const tbody = `<tbody>${t.rows.slice(head)
+    .map((r) => `<tr>${r.map((c) => cell("td", c)).join("")}</tr>`).join("")}</tbody>`;
+
+  const cap =
+    `<figcaption>${t.label ? `<b>${esc(t.label)}.</b> ` : ""}${esc(t.caption ?? "")}</figcaption>`;
+  const fn = (t.footnotes ?? []).length
+    ? `<div class="fnote">${t.footnotes.map((f) => esc(f)).join("<br>")}</div>`
+    : "";
+  const body = (t.rows ?? []).length
+    ? `<div class="tablewrap"><table>${thead}${tbody}</table></div>`
+    : `<div class="figmissing">No table data in the XML</div>`;
+  return `<figure>${body}${cap}${fn}</figure>`;
+}
+
+/** この段落が最初に参照した図を、段落の直後に出す。 */
+function figuresAfter(p, articleId, pmcid) {
+  const out = [];
+  if (showFigs) {
+    for (const rid of p.figIds ?? []) {
+      if (figPlaced.has(rid)) continue;
+      const fig = figIndex.get(rid);
+      if (!fig) continue;
+      figPlaced.add(rid);
+      out.push(renderFigure(fig, articleId, pmcid));
+    }
+  }
+  if (showTables) {
+    for (const rid of p.tableIds ?? []) {
+      if (tabPlaced.has(rid)) continue;
+      const t = tabIndex.get(rid);
+      if (!t) continue;
+      tabPlaced.add(rid);
+      out.push(renderTable(t));
+    }
+  }
+  return out.join("");
+}
+
+function renderParagraph(p, articleId, pmcid) {
+  const bits = [`<div class="para"><span class="pid">${p.id}</span>`];
+  if (p.role) bits.push(`<span class="role">${esc(p.role)}</span>`);
+  if (p.gist) bits.push(`<div class="gist">${esc(p.gist)}</div>`);
+  if (p.plain && showPlain) bits.push(`<div class="plain">${esc(p.plain)}</div>`);
+  if (showBody) {
+    const dim = p.gist ? " dim" : "";
+    bits.push(`<div class="body${dim}">${renderText(p)}</div>`);
+  }
+  bits.push("</div>");
+  return bits.join("") + figuresAfter(p, articleId, pmcid);
+}
+
+function renderSections(list, articleId, pmcid, depth = 0) {
+  return list.map((s) => {
+    const tag = depth === 0 ? "h2" : "h3";
+    const head = `<${tag}>${esc(s.title ?? s.type)} <span class="pid">${s.type}</span></${tag}>`;
+    return head +
+      s.paragraphs.map((p) => renderParagraph(p, articleId, pmcid)).join("") +
+      renderSections(s.sections, articleId, pmcid, depth + 1);
+  }).join("");
+}
+
+/** どの段落からも参照されなかった図表。落とさずに末尾へ回す。 */
+function orphans(a) {
+  let html = "";
+  if (showFigs) {
+    const rest = (a.figures ?? []).filter((f) => !figPlaced.has(f.xmlId));
+    if (rest.length) {
+      html += `<h2>Figures <span class="pid">not cited in text</span></h2>` +
+        rest.map((f) => renderFigure(f, a.id, a.meta.pmcid)).join("");
+    }
+  }
+  if (showTables) {
+    const rest = (a.tables ?? []).filter((t) => !tabPlaced.has(t.xmlId));
+    if (rest.length) {
+      html += `<h2>Tables <span class="pid">not cited in text</span></h2>` +
+        rest.map(renderTable).join("");
+    }
+  }
+  return html;
+}
+
+function render(a) {
+  const m = a.meta;
+  figIndex = new Map((a.figures ?? []).filter((f) => f.xmlId).map((f) => [f.xmlId, f]));
+  figPlaced = new Set();
+  tabIndex = new Map((a.tables ?? []).filter((t) => t.xmlId).map((t) => [t.xmlId, t]));
+  tabPlaced = new Set();
+  refIndex = new Map((a.references ?? []).filter((r) => r.xmlId).map((r) => [r.xmlId, r]));
+  const authors = m.authors.map((x) => x.full).join(", ");
+  const doi = m.doi ? ` · <a href="https://doi.org/${m.doi}" target="_blank" rel="noopener">${m.doi}</a>` : "";
+  const pmc = m.pmcid ? ` · <a href="https://pmc.ncbi.nlm.nih.gov/articles/${m.pmcid}/" target="_blank" rel="noopener">${m.pmcid}</a>` : "";
+  const passes = Object.values(a.enrich ?? {})
+    .map((e) => `${e.pass}: ${e.applied}`).join(" · ") || "not enriched";
+  out.innerHTML =
+    `<h1>${esc(m.title ?? "")}</h1>` +
+    `<div class="meta">${esc(authors)}<br>${esc(m.journal ?? "")} ${esc(m.year ?? "")}${doi}${pmc}` +
+    `<br>${esc(passes)}${a.warnings.length ? ` · ${a.warnings.length} warnings` : ""}</div>` +
+    renderSections(a.abstract, a.id, m.pmcid) +
+    renderSections(a.sections, a.id, m.pmcid) + orphans(a);
+
+  const hasCertainty = JSON.stringify(a).includes('"certainty"');
+  $("#legend").innerHTML = hasCertainty
+    ? `<i style="border-bottom:1px dotted var(--measured)">measured</i>` +
+      `<i style="border:0;background:color-mix(in srgb,var(--hedged) 10%,transparent)">hedged</i>` +
+      `<i style="border:0;background:color-mix(in srgb,var(--speculative) 13%,transparent)">speculative</i>` +
+      `<i style="border:0;background:color-mix(in srgb,var(--hedged) 30%,transparent)">hedge cue</i>`
+    : "";
+}
+
+async function load(id) {
+  out.innerHTML = '<p class="empty">Loading…</p>';
+  const r = await fetch(`/api/articles/${encodeURIComponent(id)}`);
+  if (!r.ok) { out.innerHTML = '<p class="empty">Could not load this article.</p>'; return; }
+  current = await r.json();
+  localStorage.setItem("article", id);
+  render(current);
+}
+
+/* ------------------------------------------------------------------ *
+ * 引用のホバー表示
+ *
+ * 本文に出るのは "1" のような番号だけなので、それが何の文献かは開いて
+ * みるまで分からない。ホバーで書誌を出し、クリックで PubMed に飛ばす。
+ * イベントは main に 1 つだけ付ける (段落ごとに付けると再描画のたびに増える)。
+ * ------------------------------------------------------------------ */
+
+/** 著者は 3 名まで。全部出すと本文より長くなる。 */
+function formatAuthors(list) {
+  const a = list ?? [];
+  if (a.length === 0) return "";
+  return a.length <= 3 ? a.join(", ") : `${a.slice(0, 3).join(", ")}, et al.`;
+}
+
+function tipHtml(r) {
+  const src = [r.source, r.year, r.volume && `${r.volume}`, r.pages].filter(Boolean).join(" ");
+  const go = r.pmid ? `PubMed ${r.pmid} →` : r.doi ? `doi.org →` : "リンクなし";
+  return (
+    `<div class="a">${esc(formatAuthors(r.authors))}</div>` +
+    `<div class="t">${esc(r.title ?? "(タイトルなし)")}</div>` +
+    `<div class="s">${esc(src)}</div>` +
+    `<div class="go">${esc(go)}</div>`
+  );
+}
+
+function setupTooltip() {
+  const tip = $("#tip");
+  const hide = () => { tip.style.display = "none"; };
+
+  out.addEventListener("mouseover", (ev) => {
+    const el = ev.target.closest("a.ref");
+    if (!el) return;
+    const r = refIndex.get(el.dataset.rid);
+    if (!r) return;
+    tip.innerHTML = tipHtml(r);
+    tip.style.display = "block";
+
+    // 画面外にはみ出さない位置に寄せる。右端・下端で反転させる。
+    const box = el.getBoundingClientRect();
+    const t = tip.getBoundingClientRect();
+    const x = Math.max(8, Math.min(box.left, innerWidth - t.width - 8));
+    const y = box.bottom + 8 + t.height > innerHeight ? box.top - t.height - 8 : box.bottom + 8;
+    tip.style.left = `${x}px`;
+    tip.style.top = `${Math.max(8, y)}px`;
+  });
+  out.addEventListener("mouseout", (ev) => {
+    if (ev.target.closest("a.ref")) hide();
+  });
+  // スクロールすると位置がずれるので消す
+  addEventListener("scroll", hide, { passive: true });
+}
+
+async function init() {
+  const list = await (await fetch("/api/articles")).json();
+  if (!list.length) { out.innerHTML = '<p class="empty">No JSON in data/articles. Run <code>npm run build</code> first.</p>'; return; }
+  pick.innerHTML = list
+    .map((e) => `<option value="${esc(e.id)}">${esc(e.label)} — ${esc(e.title.slice(0, 60))}${e.title.length > 60 ? "…" : ""}</option>`)
+    .join("");
+  const saved = localStorage.getItem("article");
+  if (saved && list.some((e) => e.id === saved)) pick.value = saved;
+  pick.addEventListener("change", () => load(pick.value));
+  $("#toggleBody").addEventListener("click", (ev) => {
+    showBody = !showBody; ev.target.setAttribute("aria-pressed", String(showBody));
+    if (current) render(current);
+  });
+  $("#togglePlain").addEventListener("click", (ev) => {
+    showPlain = !showPlain; ev.target.setAttribute("aria-pressed", String(showPlain));
+    if (current) render(current);
+  });
+  $("#toggleFigs").addEventListener("click", (ev) => {
+    showFigs = !showFigs; ev.target.setAttribute("aria-pressed", String(showFigs));
+    if (current) render(current);
+  });
+  $("#toggleTables").addEventListener("click", (ev) => {
+    showTables = !showTables; ev.target.setAttribute("aria-pressed", String(showTables));
+    if (current) render(current);
+  });
+  setupTooltip();
+  load(pick.value);
+}
+init();
+</script>
+</body>
+</html>

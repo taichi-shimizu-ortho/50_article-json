@@ -1,0 +1,10 @@
+{
+  "cacheKey": "a8afd69a1a1c8ea27cc3b65409e43d0e",
+  "pass": "paragraph",
+  "savedAt": "2026-08-12T01:48:42.545Z",
+  "data": {
+    "role": "background",
+    "gist": "Marrow ECM shapes MSC behavior; aspiration misses bone-adherent MSCs, so BMAX and BMAC may contain distinct subpopulations — not directly tested here.",
+    "plain": "The bone marrow environment, especially its extracellular matrix, influences how stem cells grow and what they secrete. Recent mapping showed MSC types are spatially organized, and aspiration fails to capture cells tightly attached to bone, biasing toward fat-lineage cells. The authors say it is therefore plausible that BMAX and BMAC contain partly different MSC subpopulations, consistent with more CD146+ perivascular cells in BMAX cultures, but they explicitly did not phenotype the subpopulations and flag this as future work."
+  }
+}

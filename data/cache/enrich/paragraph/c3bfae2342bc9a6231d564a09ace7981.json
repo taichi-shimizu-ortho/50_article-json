@@ -1,0 +1,10 @@
+{
+  "cacheKey": "c3bfae2342bc9a6231d564a09ace7981",
+  "pass": "paragraph",
+  "savedAt": "2026-08-12T01:56:31.695Z",
+  "data": {
+    "role": "interpretation",
+    "gist": "Proposed but unverified mechanism: prior in vitro data (BMAX MSCs showing IRAP expression, higher IL-6 after TNF-α, lower IP-10, fewer leukocytes) may explain reduced pain and swelling, though these mediators were not measured here.",
+    "plain": "The authors speculate that BMAX outperformed BMAC on movement-evoked pain and knee swelling because of differences in immune-signaling molecules released by the cells and in white blood cell content. In earlier in vitro work, BMAX-derived MSCs responded more strongly to the inflammatory cytokine TNF-α (expressing the IL-1 blocker IRAP and significantly more IL-6), while BMAC MSCs made much more of the leukocyte-attracting chemokine IP-10, likely because BMAC is overwhelmingly leukocytes. They explicitly state these mediators were not measured in the present study, so the mechanism remains speculative and needs future cytokine and molecular profiling."
+  }
+}

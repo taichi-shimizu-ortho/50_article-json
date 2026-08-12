@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "note": "このコーパスを構成する論文の目録。書誌情報は事実なので全件載せる。再配布できない論文の本文・図版・要約は data/private/ にあり git に入っていないので、fetch から各自で取得すること。",
+  "papers": [
+    {
+      "id": "10-3390-cells15141249",
+      "doi": "10.3390/cells15141249",
+      "pmcid": "PMC13407337",
+      "title": "Preclinical Evaluation of Human Donor-Derived Micronized Bone Marrow Stroma/Parenchyma Versus Bone Marrow Aspirate Concentrate in a Rat Model of Post-Traumatic Knee Osteoarthritis",
+      "firstAuthor": "Nishimura",
+      "journal": "Cells",
+      "year": "2026",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "licenseText": "Licensee MDPI, Basel, Switzerland. This article is an open access article distributed under the terms and conditions of the Creative Commons Attribution (CC BY) license.",
+      "redistributable": true,
+      "licenseBasis": "CC BY",
+      "source": {
+        "file": "cells-15-01249.xml",
+        "sha256": "d92ad3a62d2ac40114c1d15198d7c5f3f050e1c45fe5d6db7b1f69e757e67956"
+      },
+      "fetch": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13407337/"
+    },
+    {
+      "id": "10-4081-or-2011-e6",
+      "doi": "10.4081/or.2011.e6",
+      "pmcid": "PMC3143999",
+      "pmid": "21808718",
+      "title": "Femoral and obturator nerves palsy caused by pelvic cement extrusion after hip arthroplasty",
+      "firstAuthor": "Zwolak",
+      "journal": "Orthopedic Reviews",
+      "year": "2011",
+      "licenseText": "This work is licensed under a Creative Commons Attribution 3.0 License (by-nc 3.0).Licensee PAGEPress, Italy",
+      "redistributable": false,
+      "licenseBasis": "NC (再配布不可)",
+      "source": {
+        "file": "PMC3143999.xml",
+        "sha256": "67dbf552121e5cdf888e723036ba36a6e9efdb73aadabd82c822282a9d81bce0"
+      },
+      "fetch": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3143999/"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "cacheKey": "801ddb19756ff8a48d937abfd4fcb888",
+  "pass": "paragraph",
+  "savedAt": "2026-08-12T01:48:42.545Z",
+  "data": {
+    "role": "method",
+    "gist": "CFU-F assays plated 1×10^6 marrow mononuclear cells, counting colonies of ≥50 fibroblast-like cells after 14 days plus colorimetric quantification.",
+    "plain": "To measure how many marrow cells could form stem-cell colonies, mononuclear cells were plated and grown for two weeks, then fixed and stained with crystal violet. Clusters of at least 50 fibroblast-like cells were counted as colonies and expressed per mL marrow or per 100,000 cells, with overall growth also read on a spectrophotometer."
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "cacheKey": "9582792b090952129496fbc402185e6b",
+  "pass": "paragraph",
+  "savedAt": "2026-08-12T01:56:12.227Z",
+  "data": {
+    "role": "method",
+    "gist": "A post hoc power analysis (G*Power 3.1, two-tailed t-test, α=0.05) was based on the 12-week knee bend score difference between BMAC and BMAX.",
+    "plain": "Statistical power was calculated after the fact, using the observed BMAC-versus-BMAX difference in the 12-week knee bend pain score, which they treated as the main functional outcome for comparing the two treatments."
+  }
+}
