@@ -23,6 +23,27 @@ npm run typecheck
 拡張子は `.xml` / `.nxml` / `.jats` を認識する。ファイル名は任意でよい
 (出力名は XML 内の DOI から決まる)。
 
+### 再配布不可の論文を各端末で取得する
+
+再配布不可として扱う論文の XML・JSON・図版・要約は公開リポジトリに含めない。
+目録にある PMC 論文は、**取得元の利用条件を確認し、ローカル利用の権限がある利用者だけ**
+が次のコマンドを実行できる。Windows の PowerShell と macOS のターミナルで同じコマンドを使える。
+
+```bash
+npm run fetch-private -- --dry-run           # 保存先・取得先を表示するだけ
+npm run fetch-private -- --accept-license    # 非公開XMLを data/private/raw/ に取得
+npm run build                                 # data/private/articles/ にJSONを生成
+```
+
+特定の論文だけを取得したい場合は、目録の `id`、DOI、または PMCID を指定する。
+
+```bash
+npm run fetch-private -- --id 10-4081-or-2011-e6 --accept-license
+```
+
+取得コマンドは公式 PMC E-utilities EFetch の単一レコード取得を使い、目録に記録した SHA-256 と
+一致した XML だけを保存する。保存先の `data/private/` は `.gitignore` で丸ごと除外される。
+
 ## 使い方
 
 ```bash
@@ -216,7 +237,7 @@ clone した人の手順:
 
 ```bash
 npm run corpus       # ○ が付いているものが手元に無い論文
-# corpus.json の fetch から XML を取得して data/raw/ に置く
+npm run fetch-private -- --accept-license  # 再配布不可のPMC論文を data/private/raw/ に取得
 npm run build
 ```
 

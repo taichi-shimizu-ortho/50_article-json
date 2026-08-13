@@ -18,7 +18,7 @@
 
 import { createHash } from "node:crypto";
 import { mkdirSync, existsSync, readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
-import { resolve, join, basename, extname } from "node:path";
+import { resolve, join, basename, extname, isAbsolute, relative } from "node:path";
 import { parseJats, summarize } from "./parseJats.js";
 import type { Article, Paragraph, Section } from "../types.js";
 import { dirFor, readDirs, rootForArticle } from "../paths.js";
@@ -199,6 +199,19 @@ function sha256(s: string): string {
   return createHash("sha256").update(s, "utf8").digest("hex");
 }
 
+/**
+ * 非公開の生XMLを明示して変換した場合も、公開側に本文JSONを出さない。
+ *
+ * rootForArticle() は既存JSONの置き場所を優先する。初回変換ではJSONがまだ
+ * 無いため、data/private/raw/ 配下の入力はここで先に private と判定する。
+ */
+function rootForInput(path: string, articleId: string): string {
+  const privateRaw = resolve(dirFor("data/private", "raw"));
+  const rel = relative(privateRaw, resolve(path));
+  if (rel !== "" && !rel.startsWith("..") && !isAbsolute(rel)) return "data/private";
+  return rootForArticle(articleId);
+}
+
 /* ------------------------------------------------------------------ *
  * メイン
  * ------------------------------------------------------------------ */
@@ -236,8 +249,9 @@ function main() {
       // 出力ファイル名は DOI 由来なので、先に軽くパースして id を得る必要がある。
       // ここでは全パースしてから比較する (パース自体は速いので問題にならない)。
       const article = parseJats(xml, { file: name, sha256: hash });
-      // 既にどちらかにあるならそこへ。無ければ公開側。
-      const outDir = resolve(args.outDir ?? dirFor(rootForArticle(article.id), "articles"));
+      // private/raw/ が入力なら、初回でも private/articles/ に出す。
+      // --out を明示した場合だけ、呼び出し側の出力先指定を優先する。
+      const outDir = resolve(args.outDir ?? dirFor(rootForInput(path, article.id), "articles"));
       mkdirSync(outDir, { recursive: true });
       const outPath = join(outDir, `${article.id}.json`);
 

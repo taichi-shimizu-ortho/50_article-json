@@ -292,8 +292,8 @@ function report(manifest: Manifest): void {
   console.log(`git 追跡 ${manifest.papers.length - excluded.length} / 除外 ${excluded.length}`);
   if (excluded.length > 0) {
     console.log(
-      `\nclone しただけでは除外分は入らない。${MANIFEST} の fetch から各自で取得し、` +
-        `\ndata/raw/ に置いて npm run build を実行する (sha256 で同一性を確認できる)。`,
+      `\nclone しただけでは除外分は入らない。取得元の利用条件を確認したうえで、` +
+        `\nnpm run fetch-private -- --accept-license を実行し、npm run build で変換する。`,
     );
   }
 }

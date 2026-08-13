@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "serve": "tsx src/viewer/server.ts",
     "figures": "tsx src/tools/fetchFigures.ts",
-    "corpus": "tsx src/tools/corpus.ts"
+    "corpus": "tsx src/tools/corpus.ts",
+    "fetch-private": "tsx src/tools/fetchPrivateXml.ts"
   },
   "keywords": [],
   "author": "",
