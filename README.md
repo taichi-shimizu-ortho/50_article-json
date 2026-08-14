@@ -30,7 +30,7 @@ npm run typecheck
 が次のコマンドを実行できる。Windows の PowerShell と macOS のターミナルで同じコマンドを使える。
 
 ```bash
-npm run fetch-private -- --dry-run           # 保存先・取得先を表示するだけ
+npm run fetch-private:dry-run                # 保存先・取得先を表示するだけ
 npm run fetch-private -- --accept-license    # 非公開XMLを data/private/raw/ に取得
 npm run build                                 # data/private/articles/ にJSONを生成
 ```
