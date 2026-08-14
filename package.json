@@ -16,7 +16,8 @@
     "figures": "tsx src/tools/fetchFigures.ts",
     "corpus": "tsx src/tools/corpus.ts",
     "fetch-private": "tsx src/tools/fetchPrivateXml.ts",
-    "fetch-private:dry-run": "tsx src/tools/fetchPrivateXml.ts --dry-run"
+    "fetch-private:dry-run": "tsx src/tools/fetchPrivateXml.ts --dry-run",
+    "fetch-private:accept": "tsx src/tools/fetchPrivateXml.ts --accept-license"
   },
   "keywords": [],
   "author": "",

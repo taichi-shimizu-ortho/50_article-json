@@ -293,7 +293,7 @@ function report(manifest: Manifest): void {
   if (excluded.length > 0) {
     console.log(
       `\nclone しただけでは除外分は入らない。取得元の利用条件を確認したうえで、` +
-        `\nnpm run fetch-private -- --accept-license を実行し、npm run build で変換する。`,
+        `\nnpm run fetch-private:accept を実行し、npm run build で変換する。`,
     );
   }
 }
