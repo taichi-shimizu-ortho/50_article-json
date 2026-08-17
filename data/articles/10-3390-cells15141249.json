@@ -5547,15 +5547,15 @@
   "source": {
     "flavor": "mdpi-jats",
     "file": "cells-15-01249.xml",
-    "sha256": "d92ad3a62d2ac40114c1d15198d7c5f3f050e1c45fe5d6db7b1f69e757e67956",
-    "parsedAt": "2026-08-12T06:50:10.740Z"
+    "sha256": "555d217e246b3ba9cc93c65080e89d766eb339729d95b9cfd98546477dd06221",
+    "parsedAt": "2026-08-14T13:35:31.478Z"
   },
   "enrich": {
     "paragraph": {
       "pass": "paragraph",
       "model": "claude-opus-5",
       "promptVersion": "paragraph-2",
-      "enrichedAt": "2026-08-12T02:07:34.816Z",
+      "enrichedAt": "2026-08-14T13:40:53.265Z",
       "applied": 39,
       "cached": 39,
       "warnings": []
