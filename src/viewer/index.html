@@ -67,10 +67,11 @@
     background: color-mix(in srgb, var(--hedged) 30%, transparent);
     border-radius: 3px; padding: 0 1px;
   }
-  /* 引用番号。上付きで小さく、本文の流れを乱さない程度に色を付ける。 */
+  /* 引用番号。本文の基線に揃え、連続した番号を [1, 2, 3] として読む。 */
+  .citation { color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
   a.ref {
-    color: var(--accent); text-decoration: none; font-size: .82em;
-    vertical-align: super; line-height: 0; padding: 0 1px; cursor: pointer;
+    color: inherit; text-decoration: none; font-size: .9em;
+    vertical-align: baseline; padding: 0 1px; cursor: pointer;
   }
   a.ref:hover { text-decoration: underline; }
   a.ref.dead { color: var(--muted); cursor: default; }
@@ -193,16 +194,60 @@ function renderDecoration(d, text) {
     : `<a class="ref dead" data-rid="${esc(d.rid ?? "")}">${esc(text)}</a>`;
 }
 
+/** 連続する文献番号の間にある区切りを、角括弧内で読みやすく整える。 */
+function citationSeparator(text) {
+  const compact = text.replace(/\s+/g, "").replace(/-/g, "–");
+  if (compact === "," || compact === ";") return `${compact} `;
+  return compact;
+}
+
+/**
+ * 同じ引用列の文献番号をまとめ、[1, 2, 3] の形で表示する。
+ *
+ * XMLでは各番号が別々のxrefなので、番号間が空白・カンマ・セミコロン・ダッシュ
+ * だけの場合に同一列とみなす。各番号のリンクとdata-ridは残るため、ホバー書誌と
+ * PubMed/DOIへのクリック遷移は従来どおり機能する。
+ */
+function citationRun(decos, start, p, limit) {
+  const refs = [decos[start]];
+  let next = start + 1;
+  while (next < decos.length) {
+    const prev = refs.at(-1);
+    const candidate = decos[next];
+    const between = p.text.slice(prev.b, candidate.a);
+    if (candidate.kind !== "ref" || candidate.b > limit || !/^[\s,;–—-]*$/.test(between)) break;
+    refs.push(candidate);
+    next++;
+  }
+  return { refs, next };
+}
+
 /** 段落テキストを文ごとに切り、certainty / hedge / 引用リンクを重ねる */
 function renderText(p) {
   const decos = decorations(p);
   const paint = (from, to) => {
     let s = "";
     let c = from;
-    for (const d of decos) {
-      if (d.a < c || d.b > to) continue;
-      s += esc(p.text.slice(c, d.a)) + renderDecoration(d, p.text.slice(d.a, d.b));
-      c = d.b;
+    for (let i = 0; i < decos.length;) {
+      const d = decos[i];
+      if (d.a < c || d.b > to) {
+        i++;
+        continue;
+      }
+      s += esc(p.text.slice(c, d.a));
+      if (d.kind !== "ref") {
+        s += renderDecoration(d, p.text.slice(d.a, d.b));
+        c = d.b;
+        i++;
+        continue;
+      }
+      const run = citationRun(decos, i, p, to);
+      s += `<span class="citation">[` + run.refs.map((ref, n) => {
+        const separator = n === 0 ? "" : citationSeparator(p.text.slice(run.refs[n - 1].b, ref.a));
+        return esc(separator) + renderDecoration(ref, p.text.slice(ref.a, ref.b));
+      }).join("") + `]</span>`;
+      c = run.refs.at(-1).b;
+      i = run.next;
     }
     return s + esc(p.text.slice(c, to));
   };
