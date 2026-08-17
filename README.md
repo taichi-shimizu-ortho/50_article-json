@@ -33,6 +33,7 @@ npm run typecheck
 npm run fetch-private:dry-run                # 保存先・取得先を表示するだけ
 npm run fetch-private:accept                 # 非公開XMLを data/private/raw/ に取得
 npm run build                                 # data/private/articles/ にJSONを生成
+npm run figures:private                       # 非公開論文の図版を data/private/figures/ に取得
 ```
 
 特定の論文だけを取得したい場合は、目録の `id`、DOI、または PMCID を指定する。
@@ -43,6 +44,7 @@ npx tsx src/tools/fetchPrivateXml.ts --id 10-4081-or-2011-e6 --accept-license
 
 取得コマンドは公式 PMC E-utilities EFetch の単一レコード取得を使い、目録に記録した SHA-256 と
 一致した XML だけを保存する。保存先の `data/private/` は `.gitignore` で丸ごと除外される。
+図版は、取得後にローカルファイルを優先して表示する。これにより、OSやブラウザの外部画像読込設定に左右されない。
 
 ## 使い方
 
