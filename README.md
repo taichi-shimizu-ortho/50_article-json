@@ -44,7 +44,38 @@ npx tsx src/tools/fetchPrivateXml.ts --id 10-4081-or-2011-e6 --accept-license
 
 取得コマンドは公式 PMC E-utilities EFetch の単一レコード取得を使い、目録に記録した SHA-256 と
 一致した XML だけを保存する。保存先の `data/private/` は `.gitignore` で丸ごと除外される。
-図版は、取得後にローカルファイルを優先して表示する。これにより、OSやブラウザの外部画像読込設定に左右されない。
+
+### 別スクリプトが作った JSON を取り込む
+
+論文抽出を別のパイプラインで済ませてある場合、その JSON から**最小 JATS を
+組み立てて `npm run build` に渡す**。
+
+```bash
+npm run import-json:dry-run path/to/Dominici2006-6.json   # 生成される XML を見るだけ
+npm run import-json        path/to/Dominici2006-6.json    # data/private/raw/ に保存
+npm run build -- data/private/raw/{doi-slug}.xml
+```
+
+**JSON から JSON を直接作らない。** `parseJats` は 800 行あり、文分割・span
+計算・セクション種別の分類・id の採番・派生値の引き継ぎがそこに集まっている。
+XML を 1 枚作れば既存の経路がそのまま使えて、出力も他の論文と同じ形になる。
+
+期待する入力は
+`{ title, authors: string[], journal, year, doi, sourceUrl, sections: [{ title, type, paragraphs: string[] }] }`。
+`type: "abstract"` は front の `<abstract>` に、それ以外は `<body>` の `<sec>` に入る。
+
+置き場所は `data/private/`。出版社サイト由来で再配布可否を確認できないので、
+`rootForInput()` が private と判定し、目録の判定でもライセンス表記が無いため
+`redistributable: false` になる (default deny)。出所は `<self-uri>` に残す —
+取り込み元をたどれないと後から真偽を確かめられない。
+
+著者名は `"M. Dominici"` の形なので、**先頭のイニシャルだけを given-names と
+みなして残りを姓にする**。末尾 1 語を姓と決め打ちすると `"K. Le Blanc"` が
+`"Blanc"` になり、ビューアの表示名 (姓 + 年) が崩れる。
+
+抽出元が本文を 1 セクションにまとめている場合、IMRaD の分類は `other` に
+なって警告が出る。**これは取り込み側の情報の限界**であって、本文は失われて
+いない (Dominici 2006 で 18 段落 / 54 文)。
 
 ## 使い方
 
@@ -94,6 +125,7 @@ src/enrich/runEnrich.ts       enrich CLI
 src/tools/show.ts             結果を端末で読むビューア
 src/tools/fetchFigures.ts     図版を PMC から取得
 src/tools/corpus.ts           目録の生成と、再配布不可論文の隔離
+src/tools/importArticleJson.ts  別スクリプトの JSON を最小 JATS にして取り込む
 src/paths.ts                  公開側 / 非公開側のパス解決
 src/viewer/server.ts          ブラウザ用ビューアのサーバ (依存なし)
 src/viewer/index.html         ビューア本体
@@ -124,12 +156,50 @@ npm run serve -- --figures path/to/dir
 描画しながら `paragraph.figIds` / `tableIds` を見て差し込んでいる。
 どの段落からも参照されないものは末尾にまとめる (落とさない)。
 
+`Fetch figures` ボタンで、表示中の論文の図版をローカルに保存できる
+(`npm run figures` と同じ処理を `POST /api/figures/{id}` から呼ぶ)。
+図版は git に入らないので**端末を移すたびに取り直しになる**が、
+そのためにターミナルへ戻らなくて済む。終わったら記事を読み直すので、
+そのまま `data/figures/` 側の表示に切り替わる。
+
+取得は 1 枚ごとに待ちを入れるぶん数十秒かかる。サーバは進捗を NDJSON で
+流し、ボタンのラベルが `取得中 3/7` のように変わる。
+
+**この口だけが外に出て行き、ファイルを書く。** 読むだけの他の口とは性質が
+違うので条件を絞ってある — POST のみ / 他オリジンからは 403 / id は
+`data/articles/` に実在するものだけ / 同時に 1 本だけ。127.0.0.1 に bind
+していても、利用者が開いている**別のページ**から POST は飛んでくるので、
+ローカル限定であること自体は防御にならない。
+
 **引用番号はホバーで書誌、クリックで PubMed。** 本文に出るのは `1` のような
 番号だけなので、それが何の文献かは開くまで分からない。`marks` の xref
 (`refType="bibr"`) を `<a>` にして、`rid` から `references[]` を引く。
 リンク先は **PMID があれば PubMed、無ければ doi.org** (実データ 58 件中
 45 件に PMID、7 件は DOI のみ、両方無しは 0)。図表への xref は文献ではないので
 リンクにしない。
+
+#### 範囲表記 `[5–7]` は `[5, 6, 7]` に開く
+
+**XML にあるのは両端の xref だけ。** `[5–7]` は `<xref>5</xref>–<xref>7</xref>`
+であって、間の 6 はどこにも現れない。範囲のまま出すと **6 の書誌に到達する
+手段が無い** — ホバーもクリックも 5 と 7 にしか無く、読んでいて 6 が何なのか
+分からないまま素通りすることになる。
+
+そこで両端の番号から内側を補い、`numIndex` (表示番号 → 文献) で引いて
+1 個ずつリンクにする。番号は `references[].label` (`"6."` のような形) の
+数字部分から取る。label が無ければ文献表の並び順を番号とみなす。
+
+開かない場合が 2 つある:
+
+- **内側の番号が文献表に無いとき** — 数字だけ出す。リンクにならなくても、
+  番号が見えていれば辿れる
+- **範囲が広すぎるとき** (`MAX_RANGE` = 30 超) — 番号のつもりで拾ったものが
+  別のものだった場合に、リンクを何十個も並べてしまわないための歯止め
+
+なお、この展開で**描画結果は原文の文字列と一致しなくなる** (`5–7` → `5, 6, 7`)。
+下の「textContent が原文と一致するか」は角括弧を付ける前の検証方法で、
+引用の見た目を変えた時点で成り立たない。ずれの検査に使うなら引用部分を
+除いて比べること。
 
 hedge と引用番号は**由来が違うのに同じ座標系**に乗っている。片方ずつ挿入すると
 オフセットが狂うので、`decorations()` で 1 本のリストに統合し、重なりを落として
@@ -351,6 +421,18 @@ blob URL のハッシュは推測できないので、CDN を直接叩くには�
 
 `data/figures/` は git 管理外。取り直せるうえ、ライセンスが論文ごとに違う
 (OA サービスによれば `cells15141249` は CC BY、`PMC3143999` は `license="none"`)。
+
+##### 1 → 2 の判断に `figures[].files` を使わない
+
+`files` は**取得した端末での記録**で、article JSON に入って git に乗る。
+一方 `data/figures/` は git 管理外なので、別の端末でクローンすると
+**`files` はあるのに実体が無い**状態になる。`files` だけ見て 1 に決めると
+`/figures/...` が 404 になったまま 2 に落ちず、図が全部壊れる (実際に起きた)。
+
+そこで、ローカルを試す `<img>` には落とし先を `data-fallback` に持たせておき、
+読み込みに失敗したら PMC に差し替える (`setupFigureFallback()`)。`error` は
+バブルしないので capture で拾い、`main` に 1 つだけ付ける。差し替えたら
+`data-fallback` を消す — PMC 側も落ちたときに張り替え続けないため。
 
 ### 読み込み時に弾くもの
 

@@ -16,6 +16,8 @@
     "figures": "tsx src/tools/fetchFigures.ts",
     "figures:private": "tsx src/tools/fetchFigures.ts data/private/articles",
     "corpus": "tsx src/tools/corpus.ts",
+    "import-json": "tsx src/tools/importArticleJson.ts",
+    "import-json:dry-run": "tsx src/tools/importArticleJson.ts --dry-run",
     "fetch-private": "tsx src/tools/fetchPrivateXml.ts",
     "fetch-private:dry-run": "tsx src/tools/fetchPrivateXml.ts --dry-run",
     "fetch-private:accept": "tsx src/tools/fetchPrivateXml.ts --accept-license"

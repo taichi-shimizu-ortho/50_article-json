@@ -18,9 +18,14 @@
  *     .jpg に変換して持っているので、拡張子を .jpg に寄せる。
  *
  * PMC の bin URL は CDN へ 301 する。fetch は既定でリダイレクトを追う。
+ *
+ * 取得の本体 (`fetchFiguresFor`) はビューアからも呼ぶので、**進捗は console に
+ * 直接書かず onEvent で外に出す**。CLI はそれを整形して表示し、サーバは
+ * NDJSON にしてブラウザへ流す。
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { Article, Figure } from "../types.js";
 import { dirFor, readDirs, rootForArticle } from "../paths.js";
 
@@ -44,6 +49,27 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** 待てば直る可能性のある失敗 */
 class Throttled extends Error {}
+
+/**
+ * 取得中に起きたこと。**呼び出し側が表示を決める。**
+ * CLI は行に整形し、ビューアは進捗表示とボタンのラベルに使う。
+ */
+export type FetchEvent =
+  | { type: "start"; id: string; figures: number; images: number }
+  | { type: "pmcid"; pmcid: string }
+  | { type: "plan"; label: string; url: string } // dry-run
+  | { type: "image"; name: string; bytes: number }
+  | { type: "skip"; name: string }
+  | { type: "wait"; ms: number; reason: string }
+  | { type: "failed"; name: string; message: string }
+  | { type: "note"; message: string }
+  | { type: "done"; got: number; skipped: number; failed: number; bytes: number };
+
+export interface FetchOptions {
+  force?: boolean;
+  dryRun?: boolean;
+  onEvent?: (e: FetchEvent) => void;
+}
 
 interface Args {
   inputs: string[];
@@ -124,7 +150,12 @@ function binUrl(pmcid: string, name: string): string {
  * 返ってくるので、確認せずに保存すると「壊れた画像」がディレクトリに残り、
  * 次回スキップされて原因が追えなくなる。
  */
-async function fetchOne(url: string, dest: string, force: boolean): Promise<number | null> {
+async function fetchOne(
+  url: string,
+  dest: string,
+  force: boolean,
+  emit: (e: FetchEvent) => void,
+): Promise<number | null> {
   if (!force && existsSync(dest)) return null;
 
   for (let attempt = 0; ; attempt++) {
@@ -142,7 +173,7 @@ async function fetchOne(url: string, dest: string, force: boolean): Promise<numb
     } catch (e) {
       const wait = RETRY_WAITS_MS[attempt];
       if (!(e instanceof Throttled) || wait === undefined) throw e;
-      console.log(`       待機 ${wait / 1000}s (${e.message})`);
+      emit({ type: "wait", ms: wait, reason: (e as Error).message });
       await sleep(wait);
     }
   }
@@ -150,56 +181,64 @@ async function fetchOne(url: string, dest: string, force: boolean): Promise<numb
 
 const kb = (n: number) => `${Math.round(n / 1024)} KB`;
 
-async function processArticle(file: string, args: Args): Promise<boolean> {
+/**
+ * 論文 1 本ぶんの図版を取る。**CLI とビューアの共通の入口。**
+ * 表示はしない (呼び出し側が onEvent を見て決める)。失敗が 0 件なら true。
+ */
+export async function fetchFiguresFor(file: string, opts: FetchOptions = {}): Promise<boolean> {
+  const emit = opts.onEvent ?? (() => {});
   const article = JSON.parse(readFileSync(file, "utf8")) as Article;
-  console.log(`\n${article.id}  (図 ${article.figures.length})`);
-  if (article.figures.length === 0) return true;
+  const figures = article.figures as Figure[];
+  const images = figures.reduce((n, f) => n + f.graphics.length, 0);
+  emit({ type: "start", id: article.id, figures: figures.length, images });
+  if (figures.length === 0) return true;
 
   // PMCID の解決は dry-run でも行う。ここを飛ばすと URL がプレースホルダに
   // なって「何を取りに行くか」の確認にならない (問い合わせるのはメタデータだけ)。
   const pmcid = await resolvePmcid(article);
   if (!pmcid) {
-    console.log("  PMCID を解決できないので取得先がありません (スキップ)");
+    emit({ type: "note", message: "PMCID を解決できないので取得先がありません (スキップ)" });
     return true;
   }
-  console.log(`  取得先 ${pmcid}`);
+  emit({ type: "pmcid", pmcid });
 
   // 論文の JSON がある側に置く。再配布不可なら data/private/figures/ になる。
   const outDir = join(dirFor(rootForArticle(article.id), "figures"), article.id);
-  if (!args.dryRun) mkdirSync(outDir, { recursive: true });
+  if (!opts.dryRun) mkdirSync(outDir, { recursive: true });
 
   let got = 0;
   let skipped = 0;
   let failed = 0;
   let bytes = 0;
 
-  for (const fig of article.figures as Figure[]) {
+  for (const fig of figures) {
     const files: string[] = [];
     for (const href of fig.graphics) {
       const name = displayName(href);
       const url = binUrl(pmcid, name);
       const dest = join(outDir, name);
 
-      if (args.dryRun) {
-        console.log(`  ${fig.label ?? fig.xmlId}  ${url}`);
+      if (opts.dryRun) {
+        emit({ type: "plan", label: fig.label ?? fig.xmlId ?? name, url });
         files.push(name);
         continue;
       }
 
       try {
-        const n = await fetchOne(url, dest, args.force);
+        const n = await fetchOne(url, dest, opts.force ?? false, emit);
         if (n === null) {
           skipped++;
+          emit({ type: "skip", name });
         } else {
           got++;
           bytes += n;
-          console.log(`  ok   ${name}  ${kb(n)}`);
+          emit({ type: "image", name, bytes: n });
           await sleep(DELAY_MS);
         }
         files.push(name);
       } catch (e) {
         failed++;
-        console.log(`  失敗 ${name}  ${(e as Error).message}`);
+        emit({ type: "failed", name, message: (e as Error).message });
         await sleep(DELAY_MS);
       }
     }
@@ -207,13 +246,36 @@ async function processArticle(file: string, args: Args): Promise<boolean> {
     if (files.length > 0) fig.files = files;
   }
 
-  if (!args.dryRun) {
-    writeFileSync(file, JSON.stringify(article, null, 2) + "\n", "utf8");
-    console.log(
-      `  取得 ${got} 枚 (${kb(bytes)}) / 既存 ${skipped} 枚` + (failed ? ` / 失敗 ${failed} 枚` : ""),
-    );
-  }
+  if (!opts.dryRun) writeFileSync(file, JSON.stringify(article, null, 2) + "\n", "utf8");
+  emit({ type: "done", got, skipped, failed, bytes });
   return failed === 0;
+}
+
+/** CLI の表示。ここだけが console を知っている。 */
+function printEvent(e: FetchEvent): void {
+  switch (e.type) {
+    case "start":
+      return console.log(`\n${e.id}  (図 ${e.figures})`);
+    case "pmcid":
+      return console.log(`  取得先 ${e.pmcid}`);
+    case "plan":
+      return console.log(`  ${e.label}  ${e.url}`);
+    case "image":
+      return console.log(`  ok   ${e.name}  ${kb(e.bytes)}`);
+    case "wait":
+      return console.log(`       待機 ${e.ms / 1000}s (${e.reason})`);
+    case "failed":
+      return console.log(`  失敗 ${e.name}  ${e.message}`);
+    case "note":
+      return console.log(`  ${e.message}`);
+    case "done":
+      return console.log(
+        `  取得 ${e.got} 枚 (${kb(e.bytes)}) / 既存 ${e.skipped} 枚` +
+          (e.failed ? ` / 失敗 ${e.failed} 枚` : ""),
+      );
+    case "skip":
+      return; // 既にある分は 1 行ずつ出さない (done でまとめて数える)
+  }
 }
 
 async function main(): Promise<void> {
@@ -224,9 +286,16 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   let ok = true;
-  for (const f of files) ok = (await processArticle(f, args)) && ok;
-  if (!args.dryRun) console.log("\n図版を保存しました");
+  for (const f of files) {
+    ok = (await fetchFiguresFor(f, { force: args.force, dryRun: args.dryRun, onEvent: printEvent })) && ok;
+  }
+  if (args.dryRun) console.log(`\n--dry-run: 何も取得していません`);
+  else console.log("\n図版を保存しました");
   if (!ok) process.exit(1);
 }
 
-await main();
+// ビューアからは fetchFiguresFor だけを import する。**直接実行したときだけ**
+// CLI を動かす (import しただけで取得が始まらないように)。
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}

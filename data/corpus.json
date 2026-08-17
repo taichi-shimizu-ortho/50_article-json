@@ -3,6 +3,21 @@
   "note": "このコーパスを構成する論文の目録。書誌情報は事実なので全件載せる。再配布できない論文の本文・図版・要約は data/private/ にあり git に入っていないので、fetch から各自で取得すること。",
   "papers": [
     {
+      "id": "10-1080-14653240600855905",
+      "doi": "10.1080/14653240600855905",
+      "title": "Minimal criteria for defining multipotent mesenchymal stromal cells. The International Society for Cellular Therapy position statement",
+      "firstAuthor": "Dominici",
+      "journal": "Cytotherapy",
+      "year": "2006",
+      "redistributable": false,
+      "licenseBasis": "ライセンス表記なし",
+      "source": {
+        "file": "10-1080-14653240600855905.xml",
+        "sha256": "7adf885b226e2d62db59fb56c7b237bab9c65289c5a2ec0c8cdee1c49282d1ba"
+      },
+      "fetch": "https://doi.org/10.1080/14653240600855905"
+    },
+    {
       "id": "10-3390-cells15141249",
       "doi": "10.3390/cells15141249",
       "pmcid": "PMC13407337",
@@ -16,7 +31,7 @@
       "licenseBasis": "CC BY",
       "source": {
         "file": "cells-15-01249.xml",
-        "sha256": "d92ad3a62d2ac40114c1d15198d7c5f3f050e1c45fe5d6db7b1f69e757e67956"
+        "sha256": "555d217e246b3ba9cc93c65080e89d766eb339729d95b9cfd98546477dd06221"
       },
       "fetch": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13407337/"
     },

@@ -17,7 +17,8 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Article } from "../types.js";
-import { dirFor, readDirs, ROOTS } from "../paths.js";
+import { dirFor, findArticleFile, readDirs, ROOTS } from "../paths.js";
+import { fetchFiguresFor, type FetchEvent } from "../tools/fetchFigures.js";
 
 const HERE = fileURLToPath(new URL(".", import.meta.url));
 /**
@@ -154,6 +155,71 @@ function serveFigure(pathname: string, res: import("node:http").ServerResponse):
   notFound();
 }
 
+/* ------------------------------------------------------------------ *
+ * 図版の取得 (POST /api/figures/{id})
+ *
+ * ここだけが**外に出て行き、ファイルを書く**口。読むだけの他の口とは
+ * 性質が違うので、条件を絞ってある:
+ *
+ *   - POST のみ。GET で副作用を起こさない
+ *   - Origin が他サイトなら拒否。127.0.0.1 に bind していても、利用者が
+ *     開いている**別のページ**から fetch は飛んでくる (ブラウザは
+ *     クロスオリジンでも POST 自体は送る)。ローカル限定は防御にならない
+ *   - id は data/articles/ に実在するものだけ。パスは findArticleFile が
+ *     組み立てるので、リクエストの文字列がパスになることはない
+ *   - 同時に 1 本だけ。並行させると配信元への同時アクセスになる
+ *
+ * 進捗は NDJSON で流す。取得は 1 枚ごとに待ちを入れるので、終わるまで
+ * 無言だとブラウザ側で止まって見える。
+ * ------------------------------------------------------------------ */
+
+let fetching: string | null = null;
+
+function isLocalOrigin(origin: string): boolean {
+  try {
+    const h = new URL(origin).hostname;
+    return h === "127.0.0.1" || h === "localhost" || h === "::1" || h === "[::1]";
+  } catch {
+    return false;
+  }
+}
+
+async function serveFigureFetch(
+  id: string,
+  req: import("node:http").IncomingMessage,
+  res: import("node:http").ServerResponse,
+): Promise<void> {
+  const fail = (status: number, message: string) => {
+    res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ error: message }));
+  };
+
+  if (req.method !== "POST") return fail(405, "POST してください");
+  const origin = req.headers.origin;
+  if (origin && !isLocalOrigin(origin)) return fail(403, "他のオリジンからは実行できません");
+
+  const file = findArticleFile(id);
+  if (!file) return fail(404, `not found: ${id}`);
+  if (fetching) return fail(409, `取得中です: ${fetching}`);
+
+  fetching = id;
+  res.writeHead(200, {
+    "content-type": "application/x-ndjson; charset=utf-8",
+    "cache-control": "no-cache",
+  });
+  const send = (e: FetchEvent | { type: "error"; message: string }) => res.write(JSON.stringify(e) + "\n");
+  try {
+    await fetchFiguresFor(file, { onEvent: send });
+  } catch (e) {
+    // 途中で落ちても 200 を送り出したあとなのでステータスは変えられない。
+    // 最後の 1 行で伝える (クライアントは done が来なければ失敗と見る)。
+    send({ type: "error", message: (e as Error).message });
+  } finally {
+    fetching = null;
+    res.end();
+  }
+}
+
 function parseArgs(argv: string[]): { port: number } {
   let port = 5173;
   for (let i = 0; i < argv.length; i++) {
@@ -180,6 +246,12 @@ const handler = (req: import("node:http").IncomingMessage, res: import("node:htt
   };
 
   if (url.pathname === "/api/articles") return json(buildIndex());
+
+  if (url.pathname.startsWith("/api/figures/")) {
+    const id = decodeURIComponent(url.pathname.slice("/api/figures/".length));
+    void serveFigureFetch(id, req, res);
+    return;
+  }
 
   if (url.pathname.startsWith("/api/articles/")) {
     const id = decodeURIComponent(url.pathname.slice("/api/articles/".length));

@@ -123,6 +123,7 @@
   <button id="togglePlain" aria-pressed="true">Plain</button>
   <button id="toggleFigs" aria-pressed="true">Figures</button>
   <button id="toggleTables" aria-pressed="true">Tables</button>
+  <button id="getFigs" title="この論文の図版を PMC から data/figures/ に保存する">Fetch figures</button>
   <span class="legend" id="legend"></span>
 </header>
 <main id="out"><p class="empty">Loading…</p></main>
@@ -141,6 +142,7 @@ let figPlaced = new Set();  // 既に出した xmlId (同じ図を二度出さ�
 let tabIndex = new Map();
 let tabPlaced = new Set();
 let refIndex = new Map();   // xmlId -> reference
+let numIndex = new Map();   // 表示番号 -> reference (範囲 [5–7] の内側を引く)
 
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
@@ -202,6 +204,46 @@ function citationSeparator(text) {
 }
 
 /**
+ * 範囲表記を開く上限。これを超えたら開かない。
+ * 番号のつもりで拾ったものがページ範囲などだった場合に、
+ * 何十個もリンクを並べてしまわないための歯止め。
+ */
+const MAX_RANGE = 30;
+
+/**
+ * `[5–7]` を `[5, 6, 7]` にする。
+ *
+ * **XML にあるのは両端の xref だけ。** 間の 6 はどこにも現れないので、
+ * 範囲のまま出すと 6 の書誌に到達する手段がなくなる (ホバーもクリックも
+ * 端の 5 と 7 にしか無い)。番号から文献を引いて内側を補う。
+ *
+ * 返すのは「前の番号と次の番号の間に入る HTML」。開けないときは null を
+ * 返して、呼び出し側が元の区切りを使う。
+ */
+function expandCitationRange(fromText, toText, rawSeparator) {
+  if (!/^[–—-]$/.test(citationSeparator(rawSeparator))) return null;
+  const a = Number(fromText.trim());
+  const b = Number(toText.trim());
+  // 番号として読めないもの (Fig. 2a のような添字付き) は触らない
+  if (!Number.isInteger(a) || !Number.isInteger(b)) return null;
+  if (b <= a || b - a > MAX_RANGE) return null;
+
+  const middle = [];
+  for (let n = a + 1; n < b; n++) middle.push(renderRefNumber(n));
+  return middle.length ? `, ${middle.join(", ")}, ` : ", ";
+}
+
+/**
+ * 番号だけから文献リンクを作る (範囲の内側用)。
+ * 引けなければ数字をそのまま出す — リンクにならなくても、
+ * 番号が見えていれば末尾の文献表から辿れる。
+ */
+function renderRefNumber(n) {
+  const r = numIndex.get(n);
+  return r?.xmlId ? renderDecoration({ kind: "ref", rid: r.xmlId }, String(n)) : esc(String(n));
+}
+
+/**
  * 同じ引用列の文献番号をまとめ、[1, 2, 3] の形で表示する。
  *
  * XMLでは各番号が別々のxrefなので、番号間が空白・カンマ・セミコロン・ダッシュ
@@ -243,8 +285,13 @@ function renderText(p) {
       }
       const run = citationRun(decos, i, p, to);
       s += `<span class="citation">[` + run.refs.map((ref, n) => {
-        const separator = n === 0 ? "" : citationSeparator(p.text.slice(run.refs[n - 1].b, ref.a));
-        return esc(separator) + renderDecoration(ref, p.text.slice(ref.a, ref.b));
+        const text = p.text.slice(ref.a, ref.b);
+        if (n === 0) return renderDecoration(ref, text);
+        const prev = run.refs[n - 1];
+        const raw = p.text.slice(prev.b, ref.a);
+        // 範囲なら内側を補って出す。開けなければ元の区切りのまま。
+        const expanded = expandCitationRange(p.text.slice(prev.a, prev.b), text, raw);
+        return (expanded ?? esc(citationSeparator(raw))) + renderDecoration(ref, text);
       }).join("") + `]</span>`;
       c = run.refs.at(-1).b;
       i = run.next;
@@ -283,13 +330,19 @@ const displayName = (href) => href.replace(/\.tiff?$/i, ".jpg");
  * 図 1 枚。取得元は 3 段階に落とす。
  *
  *   1. data/figures/ のローカルファイル (npm run figures で取れたもの)
- *   2. PMC から直接 (ローカルに無いとき)
+ *   2. PMC から直接 (ローカルに無いとき / ローカルが読めなかったとき)
  *   3. キャプションだけ
  *
  * 2 を持っているのは、スクリプト側の取得が PMC の bot 検知 (reCAPTCHA) に
  * 当たって落ちることがあるため。**ブラウザが自分で読みに行くぶんには通る** —
  * PMC のサイト自体がそうやって表示している。ローカルに置ければオフラインでも
  * 読めるので 1 を優先し、落ちた分だけ 2 で埋める。
+ *
+ * **1 の判断に fig.files を信用しない。** これは「取得した端末での記録」で、
+ * article JSON に入って git に乗るのに、`data/figures/` 自体は git 管理外
+ * (.gitignore)。別の端末でクローンすると files はあるのに実体が無い状態に
+ * なる。src だけ見て決めると 404 のまま 2 に落ちないので、実際に読めなかった
+ * ときの落とし先を data-fallback に持たせておく (拾うのは setupFigureFallback)。
  */
 function renderFigure(fig, articleId, pmcid) {
   const cap =
@@ -297,15 +350,14 @@ function renderFigure(fig, articleId, pmcid) {
 
   const local = new Set(fig.files ?? []);
   const names = (fig.graphics ?? []).map(displayName);
-  const sources = names.map((n) => ({
-    name: n,
-    src: local.has(n)
+  const sources = names.map((n) => {
+    const remote = pmcid ? pmcImageUrl(pmcid, n) : null;
+    const cached = local.has(n)
       ? `/figures/${encodeURIComponent(articleId)}/${encodeURIComponent(n)}`
-      : pmcid
-        ? pmcImageUrl(pmcid, n)
-        : null,
-    remote: !local.has(n),
-  })).filter((s) => s.src);
+      : null;
+    // ローカルを試すときだけ落とし先を持つ。最初から PMC なら落ちる先はない。
+    return { name: n, src: cached ?? remote, fallback: cached ? remote : null, remote: !cached };
+  }).filter((s) => s.src);
 
   if (sources.length === 0) {
     return `<figure><div class="figmissing">` +
@@ -316,10 +368,16 @@ function renderFigure(fig, articleId, pmcid) {
     // 原寸で見たいことがあるので新しいタブへのリンクにしておく
     `<a href="${s.src}" target="_blank" rel="noopener">` +
       `<img src="${s.src}" alt="${esc(fig.label ?? "figure")}" loading="lazy"` +
-      `${s.remote ? ' data-remote="1"' : ""}></a>`,
+      `${s.remote ? ' data-remote="1"' : ""}` +
+      `${s.fallback ? ` data-fallback="${esc(s.fallback)}"` : ""}></a>`,
   ).join("");
-  const note = sources.some((s) => s.remote)
-    ? `<figcaption style="opacity:.7">loaded from PMC (not cached locally)</figcaption>`
+  // PMC 由来であることは表示に出す。落ちてから出すこともあるので、
+  // その可能性がある図には hidden で置いておいて後から見せる。
+  const isRemote = sources.some((s) => s.remote);
+  const mayFallBack = sources.some((s) => s.fallback);
+  const note = isRemote || mayFallBack
+    ? `<figcaption class="remote-note" style="opacity:.7"${isRemote ? "" : " hidden"}>` +
+      `loaded from PMC (not cached locally)</figcaption>`
     : "";
   return `<figure>${imgs}${cap}${note}</figure>`;
 }
@@ -426,6 +484,13 @@ function render(a) {
   tabIndex = new Map((a.tables ?? []).filter((t) => t.xmlId).map((t) => [t.xmlId, t]));
   tabPlaced = new Set();
   refIndex = new Map((a.references ?? []).filter((r) => r.xmlId).map((r) => [r.xmlId, r]));
+  // label は "6." のように点が付く。数字だけ取る。label が無い版もあるので
+  // その場合は並び順を番号とみなす (文献表の順 = 引用番号)。
+  numIndex = new Map();
+  (a.references ?? []).forEach((r, i) => {
+    const n = Number((r.label ?? "").replace(/\D/g, "")) || i + 1;
+    if (!numIndex.has(n)) numIndex.set(n, r);
+  });
   const authors = m.authors.map((x) => x.full).join(", ");
   const doi = m.doi ? ` · <a href="https://doi.org/${m.doi}" target="_blank" rel="noopener">${m.doi}</a>` : "";
   const pmc = m.pmcid ? ` · <a href="https://pmc.ncbi.nlm.nih.gov/articles/${m.pmcid}/" target="_blank" rel="noopener">${m.pmcid}</a>` : "";
@@ -509,6 +574,99 @@ function setupTooltip() {
   addEventListener("scroll", hide, { passive: true });
 }
 
+/**
+ * ローカルの図が読めなかったら PMC に切り替える。
+ *
+ * `error` は**バブルしない**ので capture で拾う (mouseover と同じように
+ * out に 1 つだけ付ける。図ごとに付けると再描画のたびに増える)。
+ * data-fallback は一度使ったら消す — 差し替えた PMC 側も落ちたときに
+ * 無限に張り替えるのを防ぐ。
+ */
+function setupFigureFallback() {
+  out.addEventListener("error", (ev) => {
+    const img = ev.target;
+    if (!(img instanceof HTMLImageElement)) return;
+    const url = img.dataset.fallback;
+    if (!url) return;
+    delete img.dataset.fallback;
+
+    img.dataset.remote = "1";
+    img.src = url;
+    const a = img.closest("a");
+    if (a) a.href = url; // 原寸リンクも PMC に向け直す
+    const note = img.closest("figure")?.querySelector(".remote-note");
+    if (note) note.hidden = false;
+  }, true);
+}
+
+/* ------------------------------------------------------------------ *
+ * 図版をローカルに取る (POST /api/figures/{id})
+ *
+ * 取得は 1 枚ごとに待ちを入れるので数十秒かかることがある。サーバが
+ * NDJSON で進捗を流してくるので、ボタンのラベルを進捗表示に使う。
+ * ------------------------------------------------------------------ */
+
+/** NDJSON の行を読む。行はチャンク境界をまたぐので、残りを持ち越す。 */
+async function* readEvents(res) {
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split("\n");
+    buf = lines.pop() ?? ""; // 最後は不完全かもしれないので残す
+    for (const line of lines) {
+      if (line.trim()) yield JSON.parse(line);
+    }
+  }
+  if (buf.trim()) yield JSON.parse(buf);
+}
+
+function setupFigureFetch() {
+  const btn = $("#getFigs");
+
+  btn.addEventListener("click", async () => {
+    if (!current || btn.disabled) return;
+    const label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "取得中…";
+
+    let done = null;
+    let error = null;
+    try {
+      const res = await fetch(`/api/figures/${encodeURIComponent(current.id)}`, { method: "POST" });
+      if (!res.ok) {
+        error = (await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`;
+      } else {
+        let n = 0;
+        let total = 0;
+        for await (const e of readEvents(res)) {
+          if (e.type === "start") total = e.images;
+          else if (e.type === "image" || e.type === "skip") btn.textContent = `取得中 ${++n}/${total}`;
+          else if (e.type === "failed") { n++; error = `${e.name}: ${e.message}`; }
+          else if (e.type === "wait") btn.textContent = `待機中 ${e.ms / 1000}s`;
+          else if (e.type === "error") error = e.message;
+          else if (e.type === "done") done = e;
+        }
+      }
+    } catch (e) {
+      error = e.message;
+    }
+
+    // 取れた分を反映する。files が増えるので、再読み込みすればローカルを見に行く。
+    if (done && done.got > 0) await load(current.id);
+
+    btn.disabled = false;
+    if (error) btn.textContent = `失敗 (${error})`.slice(0, 40);
+    else if (done) btn.textContent = done.got > 0 ? `${done.got} 枚取得` : "取得済み";
+    else btn.textContent = label;
+    // 結果は数秒だけ見せて元に戻す
+    setTimeout(() => { btn.textContent = label; }, 4000);
+  });
+}
+
 async function init() {
   const list = await (await fetch("/api/articles")).json();
   if (!list.length) { out.innerHTML = '<p class="empty">No JSON in data/articles. Run <code>npm run build</code> first.</p>'; return; }
@@ -535,6 +693,8 @@ async function init() {
     if (current) render(current);
   });
   setupTooltip();
+  setupFigureFallback();
+  setupFigureFetch();
   load(pick.value);
 }
 init();
