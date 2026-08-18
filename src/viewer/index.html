@@ -276,14 +276,21 @@ function renderText(p) {
         i++;
         continue;
       }
-      s += esc(p.text.slice(c, d.a));
       if (d.kind !== "ref") {
+        s += esc(p.text.slice(c, d.a));
         s += renderDecoration(d, p.text.slice(d.a, d.b));
         c = d.b;
         i++;
         continue;
       }
       const run = citationRun(decos, i, p, to);
+      // **原文の角括弧を取り込む。** JATS の本文は "[1,2,3]" のように括弧まで
+      // テキストに含み、xref が指すのは数字だけ。こちらでも括弧を足すので、
+      // そのまま出すと "[[1, 2, 3]]" になる。原文側の括弧は捨てる。
+      const runEnd = run.refs.at(-1).b;
+      const absorb =
+        d.a - 1 >= c && p.text[d.a - 1] === "[" && runEnd < to && p.text[runEnd] === "]";
+      s += esc(p.text.slice(c, absorb ? d.a - 1 : d.a));
       s += `<span class="citation">[` + run.refs.map((ref, n) => {
         const text = p.text.slice(ref.a, ref.b);
         if (n === 0) return renderDecoration(ref, text);
@@ -293,7 +300,7 @@ function renderText(p) {
         const expanded = expandCitationRange(p.text.slice(prev.a, prev.b), text, raw);
         return (expanded ?? esc(citationSeparator(raw))) + renderDecoration(ref, text);
       }).join("") + `]</span>`;
-      c = run.refs.at(-1).b;
+      c = absorb ? runEnd + 1 : runEnd;
       i = run.next;
     }
     return s + esc(p.text.slice(c, to));
@@ -539,9 +546,12 @@ function formatAuthors(list) {
 function tipHtml(r) {
   const src = [r.source, r.year, r.volume && `${r.volume}`, r.pages].filter(Boolean).join(" ");
   const go = r.pmid ? `PubMed ${r.pmid} →` : r.doi ? `doi.org →` : "リンクなし";
+  // 構造化できなかった文献 (mixed-citation) は raw しか持たない。
+  // title だけ見ていると「(タイトルなし)」になって、手がかりが何も出ない。
+  const title = r.title ?? (r.raw ? r.raw.slice(0, 200) : null) ?? "(タイトルなし)";
   return (
     `<div class="a">${esc(formatAuthors(r.authors))}</div>` +
-    `<div class="t">${esc(r.title ?? "(タイトルなし)")}</div>` +
+    `<div class="t">${esc(title)}</div>` +
     `<div class="s">${esc(src)}</div>` +
     `<div class="go">${esc(go)}</div>`
   );

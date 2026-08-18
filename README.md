@@ -64,6 +64,29 @@ XML を 1 枚作れば既存の経路がそのまま使えて、出力も他の�
 `{ title, authors: string[], journal, year, doi, sourceUrl, sections: [{ title, type, paragraphs: string[] }] }`。
 `type: "abstract"` は front の `<abstract>` に、それ以外は `<body>` の `<sec>` に入る。
 
+文献の JSON (`{ records: [{ index, text, doi, pmid, pubmed }] }`) を 2 つめの
+引数に渡すと、`<back><ref-list>` を作り**本文の引用マーカーを xref に変える**。
+どちらのファイルかは形で見分ける (`sections` があれば本文、`records` があれば
+文献) ので、順番も `--flag` も要らない — npm がフラグを横取りするため。
+
+```bash
+npm run import-json article_sets/Dominici2006-6.json reference_sets/Dominici2006-5.json
+```
+
+抽出元は `[ 1 ]` `[ 4 , 5 ]` のように**括弧の内側に空白を入れる**。JATS 本来の
+形は `[1,2]` で、括弧は本文に残り xref は数字だけを指すので、空白を詰めて
+数字だけを xref にする。**文献表に無い番号は変換しない** — 飛べない xref を
+作ると「引用はあるがリンクが死んでいる」状態になり原因が分からなくなる。
+
+PubMed が引けた文献は `<element-citation>` で構造化し、引けなかったものは
+`<mixed-citation>` に生テキストを入れる (`parseJats` が `raw` として拾う)。
+巻・頁は生テキストから取れたときだけ入れる — **無い値は作らない**。
+
+著者名の分割は 2 種類あって向きが逆なので注意する。本文の著者は
+`"M. Dominici"` (イニシャルが先) なので**先頭から**削り、PubMed の著者は
+`"Le Blanc K"` (姓が先) なので**末尾のイニシャルから**削る。どちらも
+末尾 1 語を姓と決め打ちすると `Le Blanc` が壊れる。
+
 置き場所は `data/private/`。出版社サイト由来で再配布可否を確認できないので、
 `rootForInput()` が private と判定し、目録の判定でもライセンス表記が無いため
 `redistributable: false` になる (default deny)。出所は `<self-uri>` に残す —
@@ -176,7 +199,15 @@ npm run serve -- --figures path/to/dir
 (`refType="bibr"`) を `<a>` にして、`rid` から `references[]` を引く。
 リンク先は **PMID があれば PubMed、無ければ doi.org** (実データ 58 件中
 45 件に PMID、7 件は DOI のみ、両方無しは 0)。図表への xref は文献ではないので
-リンクにしない。
+リンクにしない。どちらも無い文献は `.ref dead` になり、リンクは張らないが
+ホバーの書誌は出す。構造化できなかった文献は `raw` を出す — `title` だけ
+見ていると「(タイトルなし)」になって手がかりが何も残らない。
+
+#### 原文の角括弧は取り込む
+
+JATS の本文は `[1,2,3]` のように**括弧までテキストに含み**、xref が指すのは
+数字だけ。ビューア側でも括弧を付けるので、素直に出すと `[[1, 2, 3]]` になる。
+引用列の直前が `[`、直後が `]` ならそれを捨ててから組み立てる。
 
 #### 範囲表記 `[5–7]` は `[5, 6, 7]` に開く
 

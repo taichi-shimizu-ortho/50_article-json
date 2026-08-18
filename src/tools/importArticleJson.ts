@@ -26,7 +26,14 @@
  *    sections: [{ title, type, paragraphs: string[], subsections }] }`
  *
  * `type: "abstract"` のセクションは front の <abstract> に、それ以外は
- * <body> の <sec> に入れる。段落は素のテキストで、xref の情報は持たない。
+ * <body> の <sec> に入れる。
+ *
+ * ## 文献 (任意の 2 つめの入力)
+ *
+ * `{ records: [{ index, text, doi, pmid, pubmed: {...} }] }` を渡すと
+ * <back><ref-list> を作り、本文の `[ 1 ]` `[ 4 , 5 ]` を xref に変える。
+ * **どちらのファイルかは形で見分ける** (sections があれば本文、records が
+ * あれば文献) ので、順番も --flag も要らない。
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
@@ -52,22 +59,42 @@ interface Input {
   sections?: InputSection[];
 }
 
+/** 文献 1 件。PubMed が引けていれば pubmed に構造化された値が入る。 */
+interface RefRecord {
+  index: number;
+  text?: string;
+  doi?: string;
+  pmid?: string;
+  pubmed?: {
+    title?: string;
+    authors?: string[];
+    journal?: string;
+    year?: string;
+    doi?: string;
+    pmid?: string;
+  };
+}
+
+interface RefInput {
+  records?: RefRecord[];
+}
+
 interface Args {
-  file: string;
+  files: string[];
   dryRun: boolean;
   force: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { file: "", dryRun: false, force: false };
+  const args: Args = { files: [], dryRun: false, force: false };
   for (const a of argv) {
     if (a === "--dry-run" || a === "-n") args.dryRun = true;
     else if (a === "--force" || a === "-f") args.force = true;
     else if (a.startsWith("-")) throw new Error(`不明なオプション: ${a}`);
-    else if (!args.file) args.file = a;
-    else throw new Error(`入力は 1 つだけ指定してください: ${a}`);
+    else args.files.push(a);
   }
-  if (!args.file) throw new Error("取り込む JSON のパスを指定してください");
+  if (args.files.length === 0) throw new Error("取り込む JSON のパスを指定してください");
+  if (args.files.length > 2) throw new Error("入力は本文 JSON と文献 JSON の 2 つまでです");
   return args;
 }
 
@@ -88,25 +115,122 @@ function splitName(full: string): { surname: string; given?: string } {
   return { surname: parts.join(" ") || full, given: initials.join(" ") || undefined };
 }
 
+const refId = (n: number) => `B${n}`;
+
+/**
+ * 本文の引用マーカーを xref に変える。
+ *
+ * 抽出元は `[ 1 ]` `[ 4 , 5 ]` のように**括弧の内側に空白を入れる**。
+ * JATS 本来の形は `[1,2]` で括弧は本文に残り xref は数字だけを指すので、
+ * 空白を詰めたうえで数字だけを xref にする (ビューアは原文の括弧を取り込む)。
+ *
+ * **文献表に無い番号は変換しない。** リンク先の無い xref を作ると、
+ * 「引用はあるが飛べない」状態になり、原因が分からなくなる。
+ */
+function withXrefs(text: string, known: Set<number>): string {
+  return text.replace(/\[[\s\d,;–—-]*\d[\s\d,;–—-]*\]/g, (marker) => {
+    const inner = marker.slice(1, -1);
+    // 数字と区切りを順に拾い直す。区切りは原文のものを残す (範囲の – も)。
+    const parts = inner.match(/\d+|[,;–—-]/g) ?? [];
+    if (!parts.some((p) => /^\d+$/.test(p) && known.has(Number(p)))) return marker;
+    const body = parts
+      .map((p) =>
+        /^\d+$/.test(p) && known.has(Number(p))
+          ? `<xref ref-type="bibr" rid="${refId(Number(p))}">${p}</xref>`
+          : esc(p),
+      )
+      .join("");
+    return `[${body}]`;
+  });
+}
+
 /** 段落を <p> にする。空行と、抽出時に残った制御文字は落とす。 */
-function paragraphs(list: string[] | undefined): string[] {
+function paragraphs(list: string[] | undefined, known: Set<number>): string[] {
   return (list ?? [])
     .map((p) => p.replace(/\s+/g, " ").trim())
     .filter((p) => p.length > 0)
-    .map((p) => `      <p>${esc(p)}</p>`);
+    .map((p) => `      <p>${withXrefs(esc(p), known)}</p>`);
 }
 
-function sectionXml(s: InputSection, depth = 3): string {
+/**
+ * "Horwitz E M" → 姓 + イニシャル。PubMed は姓が先に来る。
+ *
+ * **末尾のイニシャルから削る。** 先頭 1 語を姓と取ると "Le Blanc K" が
+ * 姓 "Le" になる。姓は複数語になり得るがイニシャルは必ず末尾の 1 文字語。
+ */
+function pubmedName(full: string): string {
+  const parts = full.trim().split(/\s+/);
+  const initials: string[] = [];
+  while (parts.length > 1 && /^[A-Z]{1,3}$/.test(parts[parts.length - 1])) {
+    initials.unshift(parts.pop()!);
+  }
+  const surname = parts.join(" ") || full;
+  const given = initials.join(" ");
+  return (
+    `          <name><surname>${esc(surname)}</surname>` +
+    (given ? `<given-names>${esc(given)}</given-names>` : "") +
+    `</name>`
+  );
+}
+
+/**
+ * 文献 1 件を <ref> にする。
+ *
+ * PubMed が引けていれば element-citation で構造化し、引けていなければ
+ * mixed-citation に生テキストを入れる (parseJats が raw として拾う)。
+ * **無い値を作らない** — 巻・頁は生テキストから拾えたときだけ入れる。
+ */
+function refXml(r: RefRecord): string {
+  const n = r.index;
+  const pm = r.pubmed;
+  const doi = r.doi ?? pm?.doi;
+  const pmid = r.pmid ?? pm?.pmid;
+  const ids = [
+    doi ? `          <pub-id pub-id-type="doi">${esc(doi)}</pub-id>` : "",
+    pmid ? `          <pub-id pub-id-type="pmid">${esc(pmid)}</pub-id>` : "",
+  ].filter(Boolean);
+
+  if (!pm?.title) {
+    return [
+      `      <ref id="${refId(n)}">`,
+      `        <label>${n}.</label>`,
+      `        <mixed-citation>${esc(r.text ?? "")}</mixed-citation>`,
+      ...ids,
+      `      </ref>`,
+    ].join("\n");
+  }
+
+  // "Cytotherapy, 7 (2005), pp. 393-395" から巻と頁を拾う。取れなければ入れない。
+  const m = /,\s*(\d+)\s*\(\d{4}\),\s*pp?\.\s*(\d+)\s*[-–]\s*(\d+)/.exec(r.text ?? "");
+  const lines = [
+    `      <ref id="${refId(n)}">`,
+    `        <label>${n}.</label>`,
+    `        <element-citation publication-type="journal">`,
+    ...(pm.authors ?? []).map(pubmedName),
+    `          <article-title>${esc(pm.title)}</article-title>`,
+    pm.journal ? `          <source>${esc(pm.journal)}</source>` : "",
+    pm.year ? `          <year>${esc(pm.year)}</year>` : "",
+    m ? `          <volume>${m[1]}</volume>` : "",
+    m ? `          <fpage>${m[2]}</fpage><lpage>${m[3]}</lpage>` : "",
+    ...ids,
+    `        </element-citation>`,
+    `      </ref>`,
+  ];
+  return lines.filter((l) => l !== "").join("\n");
+}
+
+function sectionXml(s: InputSection, known: Set<number>, depth = 3): string {
   const pad = "  ".repeat(depth);
   const title = s.title ? `${pad}  <title>${esc(s.title)}</title>\n` : "";
   // sec-type は分類のヒントとして渡す。最終的な種別は classifySection が決める。
   const type = s.type && s.type !== "other" ? ` sec-type="${esc(s.type)}"` : "";
-  const body = paragraphs(s.paragraphs).join("\n");
-  const subs = (s.subsections ?? []).map((x) => sectionXml(x, depth + 1)).join("\n");
+  const body = paragraphs(s.paragraphs, known).join("\n");
+  const subs = (s.subsections ?? []).map((x) => sectionXml(x, known, depth + 1)).join("\n");
   return `${pad}<sec${type}>\n${title}${body}${subs ? "\n" + subs : ""}\n${pad}</sec>`;
 }
 
-function toJats(input: Input): string {
+function toJats(input: Input, records: RefRecord[]): string {
+  const known = new Set(records.map((r) => r.index));
   const all = input.sections ?? [];
   const abstracts = all.filter((s) => s.type === "abstract" || /^abstract$/i.test(s.title ?? ""));
   const body = all.filter((s) => !abstracts.includes(s));
@@ -122,8 +246,12 @@ function toJats(input: Input): string {
   });
 
   const abstractXml = abstracts
-    .map((s) => `      <abstract>\n${paragraphs(s.paragraphs).join("\n")}\n      </abstract>`)
+    .map((s) => `      <abstract>\n${paragraphs(s.paragraphs, known).join("\n")}\n      </abstract>`)
     .join("\n");
+
+  const backXml = records.length
+    ? [`  <back>`, `    <ref-list>`, ...records.map(refXml), `    </ref-list>`, `  </back>`].join("\n")
+    : "";
 
   return [
     `<?xml version="1.0" encoding="UTF-8"?>`,
@@ -143,8 +271,9 @@ function toJats(input: Input): string {
     `    </article-meta>`,
     `  </front>`,
     `  <body>`,
-    body.map((s) => sectionXml(s)).join("\n"),
+    body.map((s) => sectionXml(s, known)).join("\n"),
     `  </body>`,
+    backXml,
     `</article>`,
     "",
   ]
@@ -154,23 +283,37 @@ function toJats(input: Input): string {
 
 function main(): void {
   const args = parseArgs(process.argv.slice(2));
-  const path = resolve(args.file);
-  if (!existsSync(path)) throw new Error(`見つかりません: ${args.file}`);
 
-  const input = JSON.parse(readFileSync(path, "utf8")) as Input;
-  if (!input.sections?.length) throw new Error("sections がありません。取り込める形式ではありません。");
+  // **形で見分ける。** sections があれば本文、records があれば文献。
+  // 順番や --flag に頼らない (npm が --flag を横取りするため)。
+  let input: Input | null = null;
+  let refInput: RefInput | null = null;
+  for (const f of args.files) {
+    const p = resolve(f);
+    if (!existsSync(p)) throw new Error(`見つかりません: ${f}`);
+    const parsed = JSON.parse(readFileSync(p, "utf8")) as Input & RefInput;
+    if (parsed.sections?.length) input = parsed;
+    else if (parsed.records?.length) refInput = parsed;
+    else throw new Error(`sections も records もありません: ${f}`);
+  }
+  if (!input?.sections?.length) throw new Error("本文の JSON (sections を持つもの) がありません");
+  const article = input as Input & { sections: InputSection[] };
 
-  const xml = toJats(input);
-  const slug = input.doi ? slugFromDoi(input.doi, input.id ?? basename(path, ".json")) : (input.id ?? basename(path, ".json"));
+  const records = (refInput?.records ?? []).filter((r) => Number.isInteger(r.index));
+  const xml = toJats(article, records);
+  const fallback = article.id ?? basename(args.files[0], ".json");
+  const slug = article.doi ? slugFromDoi(article.doi, fallback) : fallback;
   const dest = join(dirFor(PRIVATE_ROOT, "raw"), `${slug}.xml`);
 
   const counts = {
-    セクション: input.sections.length,
-    段落: input.sections.reduce((n, s) => n + (s.paragraphs?.length ?? 0), 0),
-    著者: input.authors?.length ?? 0,
+    セクション: article.sections.length,
+    段落: article.sections.reduce((n, s) => n + (s.paragraphs?.length ?? 0), 0),
+    著者: article.authors?.length ?? 0,
+    文献: records.length,
+    引用: (xml.match(/<xref /g) ?? []).length,
   };
-  console.log(`入力  ${args.file}`);
-  console.log(`      ${input.title ?? "(タイトルなし)"}`);
+  console.log(`入力  ${args.files.join("\n      ")}`);
+  console.log(`      ${article.title ?? "(タイトルなし)"}`);
   console.log(`      ${Object.entries(counts).map(([k, v]) => `${k} ${v}`).join(" / ")}`);
   console.log(`保存先 ${dest}`);
 
