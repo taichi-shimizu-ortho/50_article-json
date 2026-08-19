@@ -113,7 +113,10 @@
   .fnote { color: var(--muted); font-size: 12px; margin-top: 6px; }
   .legend { color: var(--muted); font-size: 12px; margin-left: auto; }
   .legend i { font-style: normal; border-bottom: 2px solid; padding-bottom: 1px; margin-left: 10px; }
-  .empty { color: var(--muted); padding: 40px 0; }
+    .empty { color: var(--muted); padding: 40px 0; }
+  .tts-status { color: var(--muted); font-size: 12px; flex: 1 1 180px; }
+  button:disabled { cursor: not-allowed; opacity: .55; }
+
 </style>
 </head>
 <body>
@@ -122,8 +125,13 @@
   <button id="toggleBody" aria-pressed="true">Full text</button>
   <button id="togglePlain" aria-pressed="true">Plain</button>
   <button id="toggleFigs" aria-pressed="true">Figures</button>
-  <button id="toggleTables" aria-pressed="true">Tables</button>
+    <button id="toggleTables" aria-pressed="true">Tables</button>
+  <button id="ttsPlay" type="button" title="Read the article in US English">Read aloud</button>
+  <button id="ttsPause" type="button" aria-pressed="false" disabled>Pause</button>
+  <button id="ttsStop" type="button" disabled>Stop</button>
+  <span class="tts-status" id="ttsStatus" role="status" aria-live="polite"></span>
   <span class="legend" id="legend"></span>
+
 </header>
 <main id="out"><p class="empty">Loading…</p></main>
 <div id="tip"></div>
@@ -141,6 +149,155 @@ let figPlaced = new Set();  // 既に出した xmlId (同じ図を二度出さ�
 let tabIndex = new Map();
 let tabPlaced = new Set();
 let refIndex = new Map();   // xmlId -> reference
+
+/* ------------------------------------------------------------------ *
+ * Text-to-speech
+ *
+ * Chrome exposes Google US English through the browser's SpeechSynthesis
+ * voice list.  Prefer that exact voice, and use another en-US voice only
+ * when it is not installed on the reader's device.  No text leaves the
+ * browser for this feature.
+ * ------------------------------------------------------------------ */
+const tts = { chunks: [], index: 0, active: false, stopping: false, utterance: null };
+
+function speechAvailable() {
+  return "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+}
+
+function preferredVoice() {
+  const voices = speechSynthesis.getVoices();
+  return voices.find((v) => v.name === "Google US English")
+    ?? voices.find((v) => /google.*us english/i.test(v.name))
+    ?? voices.find((v) => /^en-US$/i.test(v.lang))
+    ?? voices.find((v) => /^en[-_]?US/i.test(v.lang))
+    ?? voices.find((v) => /^en/i.test(v.lang))
+    ?? null;
+}
+
+function setTtsStatus(message) {
+  $("#ttsStatus").textContent = message;
+}
+
+function updateTtsControls() {
+  const supported = speechAvailable();
+  const paused = supported && speechSynthesis.paused;
+  $("#ttsPlay").disabled = !supported || tts.active;
+  $("#ttsPause").disabled = !supported || !tts.active;
+  $("#ttsStop").disabled = !supported || !tts.active;
+  $("#ttsPause").textContent = paused ? "Resume" : "Pause";
+  $("#ttsPause").setAttribute("aria-pressed", String(paused));
+}
+
+function splitSpeechText(text, maxLength = 240) {
+  const sentences = text.replace(/\s+/g, " ").trim().match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [];
+  const chunks = [];
+  let chunk = "";
+  for (const sentence of sentences) {
+    const words = sentence.trim().split(/\s+/).filter(Boolean);
+    for (const word of words) {
+      if ((chunk ? `${chunk} ${word}` : word).length > maxLength && chunk) {
+        chunks.push(chunk);
+        chunk = word;
+      } else {
+        chunk = chunk ? `${chunk} ${word}` : word;
+      }
+    }
+    if (chunk && /[.!?]$/.test(sentence.trim())) {
+      chunks.push(chunk);
+      chunk = "";
+    }
+  }
+  if (chunk) chunks.push(chunk);
+  return chunks;
+}
+
+function textForSpeech(article) {
+  const sectionText = (sections) => (sections ?? []).flatMap((section) => [
+    section.title,
+    ...(section.paragraphs ?? []).map((paragraph) => paragraph.text),
+    ...sectionText(section.sections),
+  ]);
+  return [article.meta?.title, ...sectionText(article.abstract), ...sectionText(article.sections)]
+    .filter(Boolean).join(". ");
+}
+
+function stopSpeech(silent = false) {
+  if (!speechAvailable()) return;
+  tts.stopping = true;
+  tts.active = false;
+  tts.index = 0;
+  tts.utterance = null;
+  speechSynthesis.cancel();
+  if (!silent) setTtsStatus("Reading stopped.");
+  updateTtsControls();
+}
+
+function speakNext() {
+  if (!tts.active || tts.stopping) return;
+  const text = tts.chunks[tts.index];
+  if (!text) {
+    tts.active = false;
+    tts.utterance = null;
+    setTtsStatus("Finished reading.");
+    updateTtsControls();
+    return;
+  }
+
+  const utterance = new SpeechSynthesisUtterance(text);
+  const voice = preferredVoice();
+  utterance.lang = "en-US";
+  utterance.rate = 0.95;
+  if (voice) utterance.voice = voice;
+  utterance.onend = () => {
+    if (tts.stopping || tts.utterance !== utterance) return;
+    tts.index += 1;
+    tts.utterance = null;
+    speakNext();
+  };
+  utterance.onerror = () => {
+    if (tts.stopping || tts.utterance !== utterance) return;
+    tts.active = false;
+    tts.utterance = null;
+    setTtsStatus("Could not continue reading. Please try again.");
+    updateTtsControls();
+  };
+  tts.utterance = utterance;
+  setTtsStatus(`Reading with ${voice?.name ?? "an English (US) voice"}.`);
+  speechSynthesis.speak(utterance);
+}
+
+function startSpeech() {
+  if (!speechAvailable()) {
+    setTtsStatus("Text-to-speech is not available in this browser.");
+    return;
+  }
+  const chunks = splitSpeechText(current ? textForSpeech(current) : "");
+  if (!chunks.length) {
+    setTtsStatus("There is no article text to read.");
+    return;
+  }
+  stopSpeech(true);
+  tts.chunks = chunks;
+  tts.index = 0;
+  tts.stopping = false;
+  tts.active = true;
+  updateTtsControls();
+  speakNext();
+}
+
+function toggleSpeechPause() {
+  if (!speechAvailable() || !tts.active) return;
+  if (speechSynthesis.paused) {
+    speechSynthesis.resume();
+    setTtsStatus("Reading resumed.");
+  } else {
+    speechSynthesis.pause();
+    setTtsStatus("Reading paused.");
+  }
+  updateTtsControls();
+}
+
+
 
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
@@ -448,7 +605,9 @@ function render(a) {
 }
 
 async function load(id) {
+  stopSpeech(true);
   out.innerHTML = '<p class="empty">Loading…</p>';
+
   const r = await fetch(`/api/articles/${encodeURIComponent(id)}`);
   if (!r.ok) { out.innerHTML = '<p class="empty">Could not load this article.</p>'; return; }
   current = await r.json();
@@ -530,11 +689,22 @@ async function init() {
     showFigs = !showFigs; ev.target.setAttribute("aria-pressed", String(showFigs));
     if (current) render(current);
   });
-  $("#toggleTables").addEventListener("click", (ev) => {
+    $("#toggleTables").addEventListener("click", (ev) => {
     showTables = !showTables; ev.target.setAttribute("aria-pressed", String(showTables));
     if (current) render(current);
   });
+  $("#ttsPlay").addEventListener("click", startSpeech);
+  $("#ttsPause").addEventListener("click", toggleSpeechPause);
+  $("#ttsStop").addEventListener("click", () => stopSpeech());
+  if (speechAvailable()) {
+    setTtsStatus("Ready to read aloud in US English.");
+    speechSynthesis.addEventListener("voiceschanged", updateTtsControls);
+  } else {
+    setTtsStatus("Text-to-speech is not available in this browser.");
+  }
+  updateTtsControls();
   setupTooltip();
+
   load(pick.value);
 }
 init();
