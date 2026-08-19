@@ -13,6 +13,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { dirFor, PRIVATE_ROOT } from "../paths.js";
 
 const MANIFEST = "data/corpus.json";
@@ -20,17 +21,21 @@ const TOOL = "article-json";
 const USER_AGENT = `${TOOL}/0.1 (local reading tool)`;
 const EFETCH_ENDPOINT = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi";
 
-interface Paper {
+export interface Paper {
   id: string;
   doi?: string;
   pmcid?: string;
   title?: string;
+  firstAuthor?: string;
+  journal?: string;
+  year?: string;
   redistributable: boolean;
   licenseBasis: string;
   source?: { file?: string; sha256?: string };
+  fetch?: string;
 }
 
-interface Manifest {
+export interface Manifest {
   papers: Paper[];
 }
 
@@ -63,7 +68,7 @@ function parseArgs(argv: string[]): Args {
   return args;
 }
 
-function loadManifest(): Manifest {
+export function loadManifest(): Manifest {
   if (!existsSync(MANIFEST)) throw new Error(`${MANIFEST} が見つかりません`);
   const parsed = JSON.parse(readFileSync(MANIFEST, "utf8")) as Manifest;
   if (!Array.isArray(parsed.papers)) throw new Error(`${MANIFEST} の papers が壊れています`);
@@ -95,10 +100,19 @@ function sha256(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-function privatePath(paper: Paper): string {
+export function privatePath(paper: Paper): string {
   const name = paper.source?.file;
   if (!name) throw new Error(`${paper.id}: 目録に source.file がありません`);
   return join(dirFor(PRIVATE_ROOT, "raw"), name);
+}
+
+/**
+ * 自動取得できるか。PMC EFetch は PMCID が無いと組み立てられない
+ * (import-json 由来の論文など)。取れないものは UI で「手動」と表示する。
+ */
+export function canEfetch(paper: Paper): boolean {
+  const numeric = paper.pmcid?.replace(/^PMC/i, "");
+  return Boolean(numeric && /^\d+$/.test(numeric) && paper.source?.file && paper.source?.sha256);
 }
 
 function efetchUrl(paper: Paper): string {
@@ -114,7 +128,16 @@ function efetchUrl(paper: Paper): string {
   return `${EFETCH_ENDPOINT}?${params}`;
 }
 
-async function fetchPaper(paper: Paper, args: Args): Promise<"取得" | "既存" | "予定"> {
+export interface FetchPaperOptions {
+  force?: boolean;
+  dryRun?: boolean;
+}
+
+/** 1 本取得する。CLI とビューアの共通の入口 (表示は呼び出し側)。 */
+export async function fetchPaper(
+  paper: Paper,
+  args: FetchPaperOptions = {},
+): Promise<"取得" | "既存" | "予定"> {
   const dest = privatePath(paper);
   const expected = paper.source?.sha256;
   if (!expected) throw new Error(`${paper.id}: source.sha256 がないため同一性を検証できません`);
@@ -186,4 +209,8 @@ async function main(): Promise<void> {
   if (failed) process.exitCode = 1;
 }
 
-await main();
+// ビューアからは fetchPaper などを import する。**直接実行したときだけ**
+// CLI を動かす (import しただけで取得が始まらないように)。
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main();
+}

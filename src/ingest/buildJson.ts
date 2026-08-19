@@ -19,6 +19,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, existsSync, readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, join, basename, extname, isAbsolute, relative } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parseJats, summarize } from "./parseJats.js";
 import type { Article, Paragraph, Section } from "../types.js";
 import { dirFor, readDirs, rootForArticle } from "../paths.js";
@@ -216,13 +217,71 @@ function rootForInput(path: string, articleId: string): string {
  * メイン
  * ------------------------------------------------------------------ */
 
-interface Row {
+export interface Row {
   file: string;
   status: "ok" | "skip" | "error";
   id?: string;
   paragraphs?: number;
   warnings?: number;
   message?: string;
+  /** 引き継いだ enrich 済み段落の数 */
+  carried?: number;
+}
+
+export interface BuildOptions {
+  outDir?: string;
+  force?: boolean;
+  /** 変換した Article を見たい呼び出し側 (CLI の summarize 表示) 用 */
+  onBuilt?: (article: Article) => void;
+}
+
+/**
+ * XML 1 枚を JSON に変換する。**CLI とビューアの共通の入口。**
+ * 表示はしない (呼び出し側が Row を見て決める)。例外は投げず Row で返す。
+ */
+export function buildXmlFile(path: string, opts: BuildOptions = {}): Row {
+  const name = basename(path);
+  try {
+    const xml = readXml(path);
+    const hash = sha256(xml);
+
+    // 既存の出力とハッシュが一致すればスキップ。
+    // 出力ファイル名は DOI 由来なので、先に軽くパースして id を得る必要がある。
+    // ここでは全パースしてから比較する (パース自体は速いので問題にならない)。
+    const article = parseJats(xml, { file: name, sha256: hash });
+    // private/raw/ が入力なら、初回でも private/articles/ に出す。
+    // --out を明示した場合だけ、呼び出し側の出力先指定を優先する。
+    const outDir = resolve(opts.outDir ?? dirFor(rootForInput(path, article.id), "articles"));
+    mkdirSync(outDir, { recursive: true });
+    const outPath = join(outDir, `${article.id}.json`);
+
+    let carried = 0;
+    if (existsSync(outPath)) {
+      try {
+        const prev = JSON.parse(readFileSync(outPath, "utf8")) as Article;
+        if (!opts.force && prev.source?.sha256 === hash) {
+          return { file: name, status: "skip", id: article.id };
+        }
+        // 上書きする前に、パースでは得られない値を回収する
+        carried = carryDerived(prev, article);
+      } catch {
+        // 壊れた JSON なら黙って上書きする
+      }
+    }
+
+    writeFileSync(outPath, JSON.stringify(article, null, 2));
+    opts.onBuilt?.(article);
+    return {
+      file: name,
+      status: "ok",
+      id: article.id,
+      paragraphs: countParagraphs(article),
+      warnings: article.warnings.length,
+      carried,
+    };
+  } catch (err) {
+    return { file: name, status: "error", message: (err as Error).message };
+  }
 }
 
 function main() {
@@ -240,54 +299,20 @@ function main() {
   const rows: Row[] = [];
 
   for (const path of files) {
-    const name = basename(path);
-    try {
-      const xml = readXml(path);
-      const hash = sha256(xml);
+    const row = buildXmlFile(path, {
+      outDir: args.outDir,
+      force: args.force,
+      onBuilt: args.quiet
+        ? undefined
+        : (article) => {
+            console.error(summarize(article));
+            console.error("");
+          },
+    });
+    rows.push(row);
 
-      // 既存の出力とハッシュが一致すればスキップ。
-      // 出力ファイル名は DOI 由来なので、先に軽くパースして id を得る必要がある。
-      // ここでは全パースしてから比較する (パース自体は速いので問題にならない)。
-      const article = parseJats(xml, { file: name, sha256: hash });
-      // private/raw/ が入力なら、初回でも private/articles/ に出す。
-      // --out を明示した場合だけ、呼び出し側の出力先指定を優先する。
-      const outDir = resolve(args.outDir ?? dirFor(rootForInput(path, article.id), "articles"));
-      mkdirSync(outDir, { recursive: true });
-      const outPath = join(outDir, `${article.id}.json`);
-
-      let carried = 0;
-      if (existsSync(outPath)) {
-        try {
-          const prev = JSON.parse(readFileSync(outPath, "utf8")) as Article;
-          if (!args.force && prev.source?.sha256 === hash) {
-            rows.push({ file: name, status: "skip", id: article.id });
-            continue;
-          }
-          // 上書きする前に、パースでは得られない値を回収する
-          carried = carryDerived(prev, article);
-        } catch {
-          // 壊れた JSON なら黙って上書きする
-        }
-      }
-
-      writeFileSync(outPath, JSON.stringify(article, null, 2));
-      if (carried > 0 && !args.quiet) {
-        console.error(`  enrich 済みの ${carried} 段落を引き継ぎました`);
-      }
-      rows.push({
-        file: name,
-        status: "ok",
-        id: article.id,
-        paragraphs: countParagraphs(article),
-        warnings: article.warnings.length,
-      });
-
-      if (!args.quiet) {
-        console.error(summarize(article));
-        console.error("");
-      }
-    } catch (err) {
-      rows.push({ file: name, status: "error", message: (err as Error).message });
+    if (row.status === "ok" && (row.carried ?? 0) > 0 && !args.quiet) {
+      console.error(`  enrich 済みの ${row.carried} 段落を引き継ぎました`);
     }
   }
 
@@ -338,4 +363,8 @@ function report(rows: Row[], outDir: string): void {
   }
 }
 
-main();
+// ビューアからは buildXmlFile だけを import する。**直接実行したときだけ**
+// CLI を動かす (import しただけで一括変換が始まらないように)。
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

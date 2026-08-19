@@ -9,12 +9,14 @@
     --bg: #fbfaf8; --fg: #1c1a17; --muted: #6d675e; --line: #e2ded6;
     --panel: #fff; --accent: #7a5c3e;
     --measured: #1f6f43; --supported: #4a4a4a; --hedged: #a8681a; --speculative: #a33a3a;
+    --ok: #1f6f43; --warn: #a8681a; --err: #a33a3a;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #171614; --fg: #e8e4dd; --muted: #9a938a; --line: #34312c;
       --panel: #1f1e1b; --accent: #c9a27a;
       --measured: #6dc294; --supported: #a5a09a; --hedged: #e0a559; --speculative: #e07a7a;
+      --ok: #6dc294; --warn: #e0a559; --err: #e07a7a;
     }
   }
   * { box-sizing: border-box; }
@@ -25,7 +27,7 @@
   header {
     position: sticky; top: 0; z-index: 10; background: var(--panel);
     border-bottom: 1px solid var(--line); padding: 10px 20px;
-    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
   }
   select, button {
     font: inherit; padding: 5px 9px; border: 1px solid var(--line);
@@ -33,22 +35,69 @@
   }
   /* 論文名は長い。幅が足りないときは select 側を縮める (min-width:0 が無いと
      flex アイテムは中身の幅より縮まず、ヘッダーごと横にはみ出す)。 */
-  #pickLabel { display: flex; align-items: center; gap: 6px; flex: 1 1 280px; min-width: 0; }
-  select { flex: 1; min-width: 0; }
+  #pickLabel { display: flex; align-items: center; gap: 6px; flex: 1 1 260px; min-width: 0; }
+  #pickLabel select { flex: 1; min-width: 0; }
   button { cursor: pointer; }
+  button:disabled { cursor: default; opacity: .55; }
   button[aria-pressed="true"] { background: var(--accent); color: var(--panel); border-color: var(--accent); }
-  main { max-width: 820px; margin: 0 auto; padding: 24px 20px 120px; }
+  button.primary { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+  .legend { color: var(--muted); font-size: 12px; margin-left: auto; }
+  .legend i { font-style: normal; border-bottom: 2px solid; padding-bottom: 1px; margin-left: 10px; }
+  /* ヘッダーの進捗チップ (バックグラウンドのダウンロードなど) */
+  #jobchip {
+    display: none; font-size: 12px; color: var(--muted);
+    border: 1px dashed var(--line); border-radius: 999px; padding: 2px 10px;
+    max-width: 340px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #jobchip.on { display: inline-block; }
+
+  /* ---- 2 カラム: 目次 + 本文 ---- */
+  #layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); max-width: 1120px; margin: 0 auto; }
+  nav#toc {
+    position: sticky; top: 57px; align-self: start;
+    max-height: calc(100vh - 57px); overflow-y: auto;
+    padding: 20px 8px 40px 16px;
+  }
+  #toc .paper { font-size: 12.5px; line-height: 1.5; color: var(--muted); margin: 0 8px 12px; }
+  #toc ol { list-style: none; margin: 0; padding: 0; }
+  #toc li { margin: 2px 0; }
+  #toc a {
+    display: block; padding: 5px 10px; border-radius: 6px; color: inherit;
+    text-decoration: none; font-size: 14px; line-height: 1.45;
+  }
+  #toc a:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  #toc a.on { background: var(--accent); color: var(--panel); }
+  #toc a .n { font: 11px/1 ui-monospace, monospace; opacity: .7; margin-left: 6px; }
+  main { min-width: 0; padding: 24px 24px 80px; }
+  main.wide { grid-column: 1 / -1; max-width: 900px; margin: 0 auto; width: 100%; }
+
+  /* ---- ページ送り ---- */
+  .pager {
+    display: flex; justify-content: space-between; gap: 10px;
+    margin-top: 40px; border-top: 1px solid var(--line); padding-top: 14px;
+  }
+  .pager button { max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pager .hint { color: var(--muted); font-size: 12px; align-self: center; }
+
   h1 { font-size: 21px; line-height: 1.5; margin: 0 0 6px; }
   .meta { color: var(--muted); font-size: 13px; margin-bottom: 26px; }
   .meta a { color: inherit; }
   h2 {
     font-size: 15px; letter-spacing: .06em; text-transform: uppercase;
-    color: var(--accent); margin: 34px 0 4px; border-bottom: 1px solid var(--line);
+    color: var(--accent); margin: 10px 0 4px; border-bottom: 1px solid var(--line);
     padding-bottom: 4px;
   }
   h3 { font-size: 14px; color: var(--muted); margin: 22px 0 2px; font-weight: 600; }
-  .para { margin: 18px 0; }
+  .para { margin: 18px 0; padding: 2px 6px; border-radius: 6px; }
+  .para.speaking { background: color-mix(in srgb, var(--accent) 8%, transparent); }
   .pid { font: 11px/1 ui-monospace, monospace; color: var(--muted); }
+  /* 段落単位の読み上げボタン。常に出すが薄くしておく (ホバーで濃く) */
+  .sp {
+    border: 0; background: none; padding: 0 3px; margin-left: 4px;
+    font-size: 12px; line-height: 1; opacity: .4; vertical-align: baseline;
+  }
+  .sp:hover { opacity: 1; }
+  .para.speaking .sp { opacity: 1; }
   .role {
     font: 11px/1 ui-monospace, monospace; color: var(--panel); background: var(--muted);
     border-radius: 3px; padding: 2px 5px; margin-left: 6px;
@@ -111,603 +160,141 @@
   /* 1 列目は行見出しとして読むことが多い */
   tbody td:first-child { color: var(--fg); font-weight: 500; }
   .fnote { color: var(--muted); font-size: 12px; margin-top: 6px; }
-  .legend { color: var(--muted); font-size: 12px; margin-left: auto; }
-  .legend i { font-style: normal; border-bottom: 2px solid; padding-bottom: 1px; margin-left: 10px; }
   .empty { color: var(--muted); padding: 40px 0; }
+
+  /* ---- 文献表ページ ---- */
+  ol.reflist { padding-left: 0; margin: 14px 0; list-style: none; counter-reset: ref; }
+  ol.reflist > li {
+    display: grid; grid-template-columns: 34px 1fr; gap: 8px;
+    padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px;
+  }
+  ol.reflist .num { font: 13px/1.7 ui-monospace, monospace; color: var(--accent); }
+  ol.reflist .t { font-weight: 600; }
+  ol.reflist .src, ol.reflist .au { color: var(--muted); font-size: 13px; }
+  ol.reflist a { color: var(--accent); font-size: 13px; }
+
+  /* ---- ライブラリ (corpus 一覧) ---- */
+  .libhead { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 6px 0 18px; }
+  .libhead .note { color: var(--muted); font-size: 13px; flex: 1 1 100%; }
+  .card {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+    padding: 14px 16px; margin: 12px 0; display: grid; gap: 4px;
+  }
+  .card .t { font-weight: 600; line-height: 1.5; }
+  .card .t a { color: inherit; }
+  .card .src { color: var(--muted); font-size: 13px; }
+  .card .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+  .badge {
+    font-size: 11.5px; border-radius: 999px; padding: 1px 9px; border: 1px solid var(--line);
+    color: var(--muted); white-space: nowrap;
+  }
+  .badge.ready { color: var(--ok); border-color: var(--ok); }
+  .badge.fetchable, .badge.buildable { color: var(--warn); border-color: var(--warn); }
+  .badge.manual { color: var(--err); border-color: var(--err); }
+  .joblog {
+    font: 12px/1.7 ui-monospace, monospace; color: var(--muted);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px 10px; margin-top: 10px; max-height: 220px; overflow-y: auto;
+    white-space: pre-wrap; display: none;
+  }
+  .joblog.on { display: block; }
+
+  /* ---- ダイアログ ---- */
+  dialog {
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+    color: var(--fg); max-width: 560px; width: calc(100vw - 48px);
+    padding: 20px 22px; font-size: 14px; line-height: 1.7;
+  }
+  dialog::backdrop { background: rgba(0,0,0,.35); }
+  dialog h2 { margin-top: 0; text-transform: none; letter-spacing: 0; font-size: 16px; }
+  dialog .buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+  dialog ul { margin: 8px 0; padding-left: 20px; }
+  dialog .est { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; margin: 10px 0; font-size: 13px; }
+  dialog label { display: flex; gap: 6px; align-items: center; margin: 6px 0; }
+  dialog .warn { color: var(--err); font-size: 13px; }
+
+  /* ---- 狭い画面: 目次を上に畳む ---- */
+  @media (max-width: 860px) {
+    #layout { grid-template-columns: 1fr; }
+    nav#toc {
+      position: static; max-height: none; padding: 10px 16px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    #toc ol { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 4px; padding-bottom: 8px; }
+    #toc li { flex: 0 0 auto; }
+    #toc .paper { display: none; }
+  }
 </style>
 </head>
 <body>
 <header>
+  <button id="goLibrary" title="corpus の一覧と取得状況">Library</button>
   <label id="pickLabel">Article <select id="pick"></select></label>
   <button id="toggleBody" aria-pressed="true">Full text</button>
   <button id="togglePlain" aria-pressed="true">Plain</button>
   <button id="toggleFigs" aria-pressed="true">Figures</button>
   <button id="toggleTables" aria-pressed="true">Tables</button>
   <button id="getFigs" title="この論文の図版を PMC から data/figures/ に保存する">Fetch figures</button>
+  <button id="enrichBtn" title="この論文に LLM 要約・断定度を付与する (API 課金あり)">Enrich…</button>
+  <button id="readBtn" title="このページから最後まで読み上げる (もう一度押すと停止)">▶ Read</button>
+  <select id="readRate" title="読み上げ速度">
+    <option value="0.8">0.8×</option>
+    <option value="1" selected>1×</option>
+    <option value="1.2">1.2×</option>
+    <option value="1.5">1.5×</option>
+    <option value="2">2×</option>
+  </select>
+  <span id="jobchip"></span>
   <span class="legend" id="legend"></span>
 </header>
-<main id="out"><p class="empty">Loading…</p></main>
+
+<div id="layout">
+  <nav id="toc" hidden></nav>
+  <main id="out"><p class="empty">Loading…</p></main>
+</div>
 <div id="tip"></div>
 
-<script type="module">
-const $ = (s) => document.querySelector(s);
-const pick = $("#pick"), out = $("#out");
-let showBody = true, showPlain = true, showFigs = true, showTables = true, current = null;
+<!-- ライセンス同意 (CLI の --accept-license に相当)。初回のみ。 -->
+<dialog id="consentDlg">
+  <h2>再配布不可の論文の取得</h2>
+  <p>
+    目録 (corpus) には、この端末にまだ無い論文があります。
+    これらは<b>再配布不可</b>として扱われており、XML・本文 JSON・図版は
+    公開リポジトリに含まれていません。公式 PMC E-utilities から取得し、
+    git 管理外の <code>data/private/</code> にのみ保存します。
+  </p>
+  <p>
+    <b>取得元の利用条件を確認し、ローカル利用の権限があることを確認した場合にだけ</b>
+    同意してください (CLI の <code>--accept-license</code> と同じ意味です)。
+    同意はこの端末に記録され、次回からは不足分を自動で取得します。
+  </p>
+  <div id="consentList"></div>
+  <div class="joblog" id="consentLog"></div>
+  <div class="buttons">
+    <button id="consentLater">後で</button>
+    <button id="consentAccept" class="primary">同意して取得する</button>
+  </div>
+</dialog>
 
-/* 図版と表。article.figures / article.tables は本文ツリーの外にあるので、
-   レンダリング中に「それを最初に参照した段落」の直後へ差し込む。
-   どこからも参照されないものは末尾にまとめる (落とさない)。 */
-let figIndex = new Map();   // xmlId -> figure
-let figPlaced = new Set();  // 既に出した xmlId (同じ図を二度出さない)
-let tabIndex = new Map();
-let tabPlaced = new Set();
-let refIndex = new Map();   // xmlId -> reference
-let numIndex = new Map();   // 表示番号 -> reference (範囲 [5–7] の内側を引く)
+<!-- enrich 実行の確認。課金があるので見積もりを見せてから実行する。 -->
+<dialog id="enrichDlg">
+  <h2>Enrich (LLM 付与)</h2>
+  <label>パス
+    <select id="enrichPass">
+      <option value="paragraph">paragraph — 段落の role / gist / plain</option>
+      <option value="sentence">sentence — 文の certainty / hedges / stats</option>
+    </select>
+  </label>
+  <label><input type="checkbox" id="enrichMethods"> Methods セクションも対象にする</label>
+  <div class="est" id="enrichEst">見積もりを取得中…</div>
+  <p class="warn" id="enrichWarn" hidden></p>
+  <div class="joblog" id="enrichLog"></div>
+  <div class="buttons">
+    <button id="enrichCancel">閉じる</button>
+    <button id="enrichRun" class="primary">実行する (課金あり)</button>
+  </div>
+</dialog>
 
-const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-
-/**
- * 文献のリンク先。**PubMed を優先し、無ければ DOI。**
- * 実データでは 58 件中 45 件に PMID、残り 7 件は DOI のみ (両方無しは 0)。
- */
-function refHref(r) {
-  if (!r) return null;
-  if (r.pmid) return `https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(r.pmid)}/`;
-  if (r.doi) return `https://doi.org/${encodeURIComponent(r.doi)}`;
-  return null;
-}
-
-/**
- * 段落に重ねる装飾を 1 本のリストにまとめる。
- *
- * hedge (文パス由来) と引用番号 (marks 由来) は**別々の由来だが同じ座標系**に
- * 乗っている。片方ずつ挿入するとオフセットが狂うので、先に統合して
- * 重なりを落としてから 1 回で流し込む。実際には重ならないはずだが、
- * 重なったときに壊れるより落としたほうがいい。
- */
-function decorations(p) {
-  const out = [];
-  for (const s of p.sentences ?? []) {
-    for (const [a, b] of s.hedges ?? []) out.push({ a, b, kind: "hedge" });
-  }
-  for (const m of p.marks ?? []) {
-    // 図表への xref は文献ではない
-    if (m.type === "xref" && m.refType === "bibr") {
-      out.push({ a: m.span[0], b: m.span[1], kind: "ref", rid: m.rid });
-    }
-  }
-  out.sort((x, y) => x.a - y.a || y.b - x.b);
-  const kept = [];
-  let end = -1;
-  for (const d of out) {
-    if (d.a < end || d.b <= d.a) continue;
-    kept.push(d);
-    end = d.b;
-  }
-  return kept;
-}
-
-function renderDecoration(d, text) {
-  if (d.kind === "hedge") return `<span class="hedge">${esc(text)}</span>`;
-  const r = refIndex.get(d.rid);
-  const href = refHref(r);
-  return href
-    ? `<a class="ref" href="${href}" target="_blank" rel="noopener" data-rid="${esc(d.rid ?? "")}">${esc(text)}</a>`
-    : `<a class="ref dead" data-rid="${esc(d.rid ?? "")}">${esc(text)}</a>`;
-}
-
-/** 連続する文献番号の間にある区切りを、角括弧内で読みやすく整える。 */
-function citationSeparator(text) {
-  const compact = text.replace(/\s+/g, "").replace(/-/g, "–");
-  if (compact === "," || compact === ";") return `${compact} `;
-  return compact;
-}
-
-/**
- * 範囲表記を開く上限。これを超えたら開かない。
- * 番号のつもりで拾ったものがページ範囲などだった場合に、
- * 何十個もリンクを並べてしまわないための歯止め。
- */
-const MAX_RANGE = 30;
-
-/**
- * `[5–7]` を `[5, 6, 7]` にする。
- *
- * **XML にあるのは両端の xref だけ。** 間の 6 はどこにも現れないので、
- * 範囲のまま出すと 6 の書誌に到達する手段がなくなる (ホバーもクリックも
- * 端の 5 と 7 にしか無い)。番号から文献を引いて内側を補う。
- *
- * 返すのは「前の番号と次の番号の間に入る HTML」。開けないときは null を
- * 返して、呼び出し側が元の区切りを使う。
- */
-function expandCitationRange(fromText, toText, rawSeparator) {
-  if (!/^[–—-]$/.test(citationSeparator(rawSeparator))) return null;
-  const a = Number(fromText.trim());
-  const b = Number(toText.trim());
-  // 番号として読めないもの (Fig. 2a のような添字付き) は触らない
-  if (!Number.isInteger(a) || !Number.isInteger(b)) return null;
-  if (b <= a || b - a > MAX_RANGE) return null;
-
-  const middle = [];
-  for (let n = a + 1; n < b; n++) middle.push(renderRefNumber(n));
-  return middle.length ? `, ${middle.join(", ")}, ` : ", ";
-}
-
-/**
- * 番号だけから文献リンクを作る (範囲の内側用)。
- * 引けなければ数字をそのまま出す — リンクにならなくても、
- * 番号が見えていれば末尾の文献表から辿れる。
- */
-function renderRefNumber(n) {
-  const r = numIndex.get(n);
-  return r?.xmlId ? renderDecoration({ kind: "ref", rid: r.xmlId }, String(n)) : esc(String(n));
-}
-
-/**
- * 同じ引用列の文献番号をまとめ、[1, 2, 3] の形で表示する。
- *
- * XMLでは各番号が別々のxrefなので、番号間が空白・カンマ・セミコロン・ダッシュ
- * だけの場合に同一列とみなす。各番号のリンクとdata-ridは残るため、ホバー書誌と
- * PubMed/DOIへのクリック遷移は従来どおり機能する。
- */
-function citationRun(decos, start, p, limit) {
-  const refs = [decos[start]];
-  let next = start + 1;
-  while (next < decos.length) {
-    const prev = refs.at(-1);
-    const candidate = decos[next];
-    const between = p.text.slice(prev.b, candidate.a);
-    if (candidate.kind !== "ref" || candidate.b > limit || !/^[\s,;–—-]*$/.test(between)) break;
-    refs.push(candidate);
-    next++;
-  }
-  return { refs, next };
-}
-
-/** 段落テキストを文ごとに切り、certainty / hedge / 引用リンクを重ねる */
-function renderText(p) {
-  const decos = decorations(p);
-  const paint = (from, to) => {
-    let s = "";
-    let c = from;
-    for (let i = 0; i < decos.length;) {
-      const d = decos[i];
-      if (d.a < c || d.b > to) {
-        i++;
-        continue;
-      }
-      if (d.kind !== "ref") {
-        s += esc(p.text.slice(c, d.a));
-        s += renderDecoration(d, p.text.slice(d.a, d.b));
-        c = d.b;
-        i++;
-        continue;
-      }
-      const run = citationRun(decos, i, p, to);
-      // **原文の角括弧を取り込む。** JATS の本文は "[1,2,3]" のように括弧まで
-      // テキストに含み、xref が指すのは数字だけ。こちらでも括弧を足すので、
-      // そのまま出すと "[[1, 2, 3]]" になる。原文側の括弧は捨てる。
-      const runEnd = run.refs.at(-1).b;
-      const absorb =
-        d.a - 1 >= c && p.text[d.a - 1] === "[" && runEnd < to && p.text[runEnd] === "]";
-      s += esc(p.text.slice(c, absorb ? d.a - 1 : d.a));
-      s += `<span class="citation">[` + run.refs.map((ref, n) => {
-        const text = p.text.slice(ref.a, ref.b);
-        if (n === 0) return renderDecoration(ref, text);
-        const prev = run.refs[n - 1];
-        const raw = p.text.slice(prev.b, ref.a);
-        // 範囲なら内側を補って出す。開けなければ元の区切りのまま。
-        const expanded = expandCitationRange(p.text.slice(prev.a, prev.b), text, raw);
-        return (expanded ?? esc(citationSeparator(raw))) + renderDecoration(ref, text);
-      }).join("") + `]</span>`;
-      c = absorb ? runEnd + 1 : runEnd;
-      i = run.next;
-    }
-    return s + esc(p.text.slice(c, to));
-  };
-
-  if (!p.sentences?.length) return paint(0, p.text.length);
-
-  let html = "";
-  let cursor = 0;
-  for (const s of p.sentences) {
-    if (s.span[0] > cursor) html += paint(cursor, s.span[0]);
-    const inner = paint(s.span[0], s.span[1]);
-    html += s.certainty
-      ? `<span class="s ${s.certainty}" title="${s.certainty}">${inner}</span>`
-      : `<span class="s">${inner}</span>`;
-    cursor = s.span[1];
-  }
-  return html + paint(cursor, p.text.length);
-}
-
-/**
- * PMC 上の図版 URL。**ここだけが配信元を知っている。**
- * パターンが変わったらこの関数を直す。
- */
-function pmcImageUrl(pmcid, name) {
-  const numeric = String(pmcid).replace(/^PMC/i, "");
-  return `https://pmc.ncbi.nlm.nih.gov/articles/instance/${numeric}/bin/${name}`;
-}
-
-/** .tif はブラウザで開けない。PMC は変換済みの .jpg を持っている。 */
-const displayName = (href) => href.replace(/\.tiff?$/i, ".jpg");
-
-/**
- * 図 1 枚。取得元は 3 段階に落とす。
- *
- *   1. data/figures/ のローカルファイル (npm run figures で取れたもの)
- *   2. PMC から直接 (ローカルに無いとき / ローカルが読めなかったとき)
- *   3. キャプションだけ
- *
- * 2 を持っているのは、スクリプト側の取得が PMC の bot 検知 (reCAPTCHA) に
- * 当たって落ちることがあるため。**ブラウザが自分で読みに行くぶんには通る** —
- * PMC のサイト自体がそうやって表示している。ローカルに置ければオフラインでも
- * 読めるので 1 を優先し、落ちた分だけ 2 で埋める。
- *
- * **1 の判断に fig.files を信用しない。** これは「取得した端末での記録」で、
- * article JSON に入って git に乗るのに、`data/figures/` 自体は git 管理外
- * (.gitignore)。別の端末でクローンすると files はあるのに実体が無い状態に
- * なる。src だけ見て決めると 404 のまま 2 に落ちないので、実際に読めなかった
- * ときの落とし先を data-fallback に持たせておく (拾うのは setupFigureFallback)。
- */
-function renderFigure(fig, articleId, pmcid) {
-  const cap =
-    `<figcaption>${fig.label ? `<b>${esc(fig.label)}.</b> ` : ""}${esc(fig.caption ?? "")}</figcaption>`;
-
-  const local = new Set(fig.files ?? []);
-  const names = (fig.graphics ?? []).map(displayName);
-  const sources = names.map((n) => {
-    const remote = pmcid ? pmcImageUrl(pmcid, n) : null;
-    const cached = local.has(n)
-      ? `/figures/${encodeURIComponent(articleId)}/${encodeURIComponent(n)}`
-      : null;
-    // ローカルを試すときだけ落とし先を持つ。最初から PMC なら落ちる先はない。
-    return { name: n, src: cached ?? remote, fallback: cached ? remote : null, remote: !cached };
-  }).filter((s) => s.src);
-
-  if (sources.length === 0) {
-    return `<figure><div class="figmissing">` +
-      `No image source — <code>${esc((fig.graphics ?? []).join(", "))}</code></div>${cap}</figure>`;
-  }
-
-  const imgs = sources.map((s) =>
-    // 原寸で見たいことがあるので新しいタブへのリンクにしておく
-    `<a href="${s.src}" target="_blank" rel="noopener">` +
-      `<img src="${s.src}" alt="${esc(fig.label ?? "figure")}" loading="lazy"` +
-      `${s.remote ? ' data-remote="1"' : ""}` +
-      `${s.fallback ? ` data-fallback="${esc(s.fallback)}"` : ""}></a>`,
-  ).join("");
-  // PMC 由来であることは表示に出す。落ちてから出すこともあるので、
-  // その可能性がある図には hidden で置いておいて後から見せる。
-  const isRemote = sources.some((s) => s.remote);
-  const mayFallBack = sources.some((s) => s.fallback);
-  const note = isRemote || mayFallBack
-    ? `<figcaption class="remote-note" style="opacity:.7"${isRemote ? "" : " hidden"}>` +
-      `loaded from PMC (not cached locally)</figcaption>`
-    : "";
-  return `<figure>${imgs}${cap}${note}</figure>`;
-}
-
-/**
- * 表 1 つ。
- *
- * `rows` は thead/tbody を平坦化したものなので、見出し行は `headerRows` の
- * 行数だけ先頭から取る。**先頭行を見出しと決め打ちしない** — 見出しの無い表が
- * あるし、2 行にわたる表もある。
- */
-function renderTable(t) {
-  const head = Math.max(0, Math.min(t.headerRows ?? 0, (t.rows ?? []).length));
-  const cell = (tag, v) => `<${tag}>${esc(v ?? "")}</${tag}>`;
-  const thead = head > 0
-    ? `<thead>${t.rows.slice(0, head)
-        .map((r) => `<tr>${r.map((c) => cell("th", c)).join("")}</tr>`).join("")}</thead>`
-    : "";
-  const tbody = `<tbody>${t.rows.slice(head)
-    .map((r) => `<tr>${r.map((c) => cell("td", c)).join("")}</tr>`).join("")}</tbody>`;
-
-  const cap =
-    `<figcaption>${t.label ? `<b>${esc(t.label)}.</b> ` : ""}${esc(t.caption ?? "")}</figcaption>`;
-  const fn = (t.footnotes ?? []).length
-    ? `<div class="fnote">${t.footnotes.map((f) => esc(f)).join("<br>")}</div>`
-    : "";
-  const body = (t.rows ?? []).length
-    ? `<div class="tablewrap"><table>${thead}${tbody}</table></div>`
-    : `<div class="figmissing">No table data in the XML</div>`;
-  return `<figure>${body}${cap}${fn}</figure>`;
-}
-
-/** この段落が最初に参照した図を、段落の直後に出す。 */
-function figuresAfter(p, articleId, pmcid) {
-  const out = [];
-  if (showFigs) {
-    for (const rid of p.figIds ?? []) {
-      if (figPlaced.has(rid)) continue;
-      const fig = figIndex.get(rid);
-      if (!fig) continue;
-      figPlaced.add(rid);
-      out.push(renderFigure(fig, articleId, pmcid));
-    }
-  }
-  if (showTables) {
-    for (const rid of p.tableIds ?? []) {
-      if (tabPlaced.has(rid)) continue;
-      const t = tabIndex.get(rid);
-      if (!t) continue;
-      tabPlaced.add(rid);
-      out.push(renderTable(t));
-    }
-  }
-  return out.join("");
-}
-
-function renderParagraph(p, articleId, pmcid) {
-  const bits = [`<div class="para"><span class="pid">${p.id}</span>`];
-  if (p.role) bits.push(`<span class="role">${esc(p.role)}</span>`);
-  if (p.gist) bits.push(`<div class="gist">${esc(p.gist)}</div>`);
-  if (p.plain && showPlain) bits.push(`<div class="plain">${esc(p.plain)}</div>`);
-  if (showBody) {
-    const dim = p.gist ? " dim" : "";
-    bits.push(`<div class="body${dim}">${renderText(p)}</div>`);
-  }
-  bits.push("</div>");
-  return bits.join("") + figuresAfter(p, articleId, pmcid);
-}
-
-function renderSections(list, articleId, pmcid, depth = 0) {
-  return list.map((s) => {
-    const tag = depth === 0 ? "h2" : "h3";
-    const head = `<${tag}>${esc(s.title ?? s.type)} <span class="pid">${s.type}</span></${tag}>`;
-    return head +
-      s.paragraphs.map((p) => renderParagraph(p, articleId, pmcid)).join("") +
-      renderSections(s.sections, articleId, pmcid, depth + 1);
-  }).join("");
-}
-
-/** どの段落からも参照されなかった図表。落とさずに末尾へ回す。 */
-function orphans(a) {
-  let html = "";
-  if (showFigs) {
-    const rest = (a.figures ?? []).filter((f) => !figPlaced.has(f.xmlId));
-    if (rest.length) {
-      html += `<h2>Figures <span class="pid">not cited in text</span></h2>` +
-        rest.map((f) => renderFigure(f, a.id, a.meta.pmcid)).join("");
-    }
-  }
-  if (showTables) {
-    const rest = (a.tables ?? []).filter((t) => !tabPlaced.has(t.xmlId));
-    if (rest.length) {
-      html += `<h2>Tables <span class="pid">not cited in text</span></h2>` +
-        rest.map(renderTable).join("");
-    }
-  }
-  return html;
-}
-
-function render(a) {
-  const m = a.meta;
-  figIndex = new Map((a.figures ?? []).filter((f) => f.xmlId).map((f) => [f.xmlId, f]));
-  figPlaced = new Set();
-  tabIndex = new Map((a.tables ?? []).filter((t) => t.xmlId).map((t) => [t.xmlId, t]));
-  tabPlaced = new Set();
-  refIndex = new Map((a.references ?? []).filter((r) => r.xmlId).map((r) => [r.xmlId, r]));
-  // label は "6." のように点が付く。数字だけ取る。label が無い版もあるので
-  // その場合は並び順を番号とみなす (文献表の順 = 引用番号)。
-  numIndex = new Map();
-  (a.references ?? []).forEach((r, i) => {
-    const n = Number((r.label ?? "").replace(/\D/g, "")) || i + 1;
-    if (!numIndex.has(n)) numIndex.set(n, r);
-  });
-  const authors = m.authors.map((x) => x.full).join(", ");
-  const doi = m.doi ? ` · <a href="https://doi.org/${m.doi}" target="_blank" rel="noopener">${m.doi}</a>` : "";
-  const pmc = m.pmcid ? ` · <a href="https://pmc.ncbi.nlm.nih.gov/articles/${m.pmcid}/" target="_blank" rel="noopener">${m.pmcid}</a>` : "";
-  const passes = Object.values(a.enrich ?? {})
-    .map((e) => `${e.pass}: ${e.applied}`).join(" · ") || "not enriched";
-  out.innerHTML =
-    `<h1>${esc(m.title ?? "")}</h1>` +
-    `<div class="meta">${esc(authors)}<br>${esc(m.journal ?? "")} ${esc(m.year ?? "")}${doi}${pmc}` +
-    `<br>${esc(passes)}${a.warnings.length ? ` · ${a.warnings.length} warnings` : ""}</div>` +
-    renderSections(a.abstract, a.id, m.pmcid) +
-    renderSections(a.sections, a.id, m.pmcid) + orphans(a);
-
-  const hasCertainty = JSON.stringify(a).includes('"certainty"');
-  $("#legend").innerHTML = hasCertainty
-    ? `<i style="border-bottom:1px dotted var(--measured)">measured</i>` +
-      `<i style="border:0;background:color-mix(in srgb,var(--hedged) 10%,transparent)">hedged</i>` +
-      `<i style="border:0;background:color-mix(in srgb,var(--speculative) 13%,transparent)">speculative</i>` +
-      `<i style="border:0;background:color-mix(in srgb,var(--hedged) 30%,transparent)">hedge cue</i>`
-    : "";
-}
-
-async function load(id) {
-  out.innerHTML = '<p class="empty">Loading…</p>';
-  const r = await fetch(`/api/articles/${encodeURIComponent(id)}`);
-  if (!r.ok) { out.innerHTML = '<p class="empty">Could not load this article.</p>'; return; }
-  current = await r.json();
-  localStorage.setItem("article", id);
-  render(current);
-}
-
-/* ------------------------------------------------------------------ *
- * 引用のホバー表示
- *
- * 本文に出るのは "1" のような番号だけなので、それが何の文献かは開いて
- * みるまで分からない。ホバーで書誌を出し、クリックで PubMed に飛ばす。
- * イベントは main に 1 つだけ付ける (段落ごとに付けると再描画のたびに増える)。
- * ------------------------------------------------------------------ */
-
-/** 著者は 3 名まで。全部出すと本文より長くなる。 */
-function formatAuthors(list) {
-  const a = list ?? [];
-  if (a.length === 0) return "";
-  return a.length <= 3 ? a.join(", ") : `${a.slice(0, 3).join(", ")}, et al.`;
-}
-
-function tipHtml(r) {
-  const src = [r.source, r.year, r.volume && `${r.volume}`, r.pages].filter(Boolean).join(" ");
-  const go = r.pmid ? `PubMed ${r.pmid} →` : r.doi ? `doi.org →` : "リンクなし";
-  // 構造化できなかった文献 (mixed-citation) は raw しか持たない。
-  // title だけ見ていると「(タイトルなし)」になって、手がかりが何も出ない。
-  const title = r.title ?? (r.raw ? r.raw.slice(0, 200) : null) ?? "(タイトルなし)";
-  return (
-    `<div class="a">${esc(formatAuthors(r.authors))}</div>` +
-    `<div class="t">${esc(title)}</div>` +
-    `<div class="s">${esc(src)}</div>` +
-    `<div class="go">${esc(go)}</div>`
-  );
-}
-
-function setupTooltip() {
-  const tip = $("#tip");
-  const hide = () => { tip.style.display = "none"; };
-
-  out.addEventListener("mouseover", (ev) => {
-    const el = ev.target.closest("a.ref");
-    if (!el) return;
-    const r = refIndex.get(el.dataset.rid);
-    if (!r) return;
-    tip.innerHTML = tipHtml(r);
-    tip.style.display = "block";
-
-    // 画面外にはみ出さない位置に寄せる。右端・下端で反転させる。
-    const box = el.getBoundingClientRect();
-    const t = tip.getBoundingClientRect();
-    const x = Math.max(8, Math.min(box.left, innerWidth - t.width - 8));
-    const y = box.bottom + 8 + t.height > innerHeight ? box.top - t.height - 8 : box.bottom + 8;
-    tip.style.left = `${x}px`;
-    tip.style.top = `${Math.max(8, y)}px`;
-  });
-  out.addEventListener("mouseout", (ev) => {
-    if (ev.target.closest("a.ref")) hide();
-  });
-  // スクロールすると位置がずれるので消す
-  addEventListener("scroll", hide, { passive: true });
-}
-
-/**
- * ローカルの図が読めなかったら PMC に切り替える。
- *
- * `error` は**バブルしない**ので capture で拾う (mouseover と同じように
- * out に 1 つだけ付ける。図ごとに付けると再描画のたびに増える)。
- * data-fallback は一度使ったら消す — 差し替えた PMC 側も落ちたときに
- * 無限に張り替えるのを防ぐ。
- */
-function setupFigureFallback() {
-  out.addEventListener("error", (ev) => {
-    const img = ev.target;
-    if (!(img instanceof HTMLImageElement)) return;
-    const url = img.dataset.fallback;
-    if (!url) return;
-    delete img.dataset.fallback;
-
-    img.dataset.remote = "1";
-    img.src = url;
-    const a = img.closest("a");
-    if (a) a.href = url; // 原寸リンクも PMC に向け直す
-    const note = img.closest("figure")?.querySelector(".remote-note");
-    if (note) note.hidden = false;
-  }, true);
-}
-
-/* ------------------------------------------------------------------ *
- * 図版をローカルに取る (POST /api/figures/{id})
- *
- * 取得は 1 枚ごとに待ちを入れるので数十秒かかることがある。サーバが
- * NDJSON で進捗を流してくるので、ボタンのラベルを進捗表示に使う。
- * ------------------------------------------------------------------ */
-
-/** NDJSON の行を読む。行はチャンク境界をまたぐので、残りを持ち越す。 */
-async function* readEvents(res) {
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let buf = "";
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    const lines = buf.split("\n");
-    buf = lines.pop() ?? ""; // 最後は不完全かもしれないので残す
-    for (const line of lines) {
-      if (line.trim()) yield JSON.parse(line);
-    }
-  }
-  if (buf.trim()) yield JSON.parse(buf);
-}
-
-function setupFigureFetch() {
-  const btn = $("#getFigs");
-
-  btn.addEventListener("click", async () => {
-    if (!current || btn.disabled) return;
-    const label = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = "取得中…";
-
-    let done = null;
-    let error = null;
-    try {
-      const res = await fetch(`/api/figures/${encodeURIComponent(current.id)}`, { method: "POST" });
-      if (!res.ok) {
-        error = (await res.json().catch(() => ({}))).error ?? `HTTP ${res.status}`;
-      } else {
-        let n = 0;
-        let total = 0;
-        for await (const e of readEvents(res)) {
-          if (e.type === "start") total = e.images;
-          else if (e.type === "image" || e.type === "skip") btn.textContent = `取得中 ${++n}/${total}`;
-          else if (e.type === "failed") { n++; error = `${e.name}: ${e.message}`; }
-          else if (e.type === "wait") btn.textContent = `待機中 ${e.ms / 1000}s`;
-          else if (e.type === "error") error = e.message;
-          else if (e.type === "done") done = e;
-        }
-      }
-    } catch (e) {
-      error = e.message;
-    }
-
-    // 取れた分を反映する。files が増えるので、再読み込みすればローカルを見に行く。
-    if (done && done.got > 0) await load(current.id);
-
-    btn.disabled = false;
-    if (error) btn.textContent = `失敗 (${error})`.slice(0, 40);
-    else if (done) btn.textContent = done.got > 0 ? `${done.got} 枚取得` : "取得済み";
-    else btn.textContent = label;
-    // 結果は数秒だけ見せて元に戻す
-    setTimeout(() => { btn.textContent = label; }, 4000);
-  });
-}
-
-async function init() {
-  const list = await (await fetch("/api/articles")).json();
-  if (!list.length) { out.innerHTML = '<p class="empty">No JSON in data/articles. Run <code>npm run build</code> first.</p>'; return; }
-  pick.innerHTML = list
-    .map((e) => `<option value="${esc(e.id)}">${esc(e.label)} — ${esc(e.title.slice(0, 60))}${e.title.length > 60 ? "…" : ""}</option>`)
-    .join("");
-  const saved = localStorage.getItem("article");
-  if (saved && list.some((e) => e.id === saved)) pick.value = saved;
-  pick.addEventListener("change", () => load(pick.value));
-  $("#toggleBody").addEventListener("click", (ev) => {
-    showBody = !showBody; ev.target.setAttribute("aria-pressed", String(showBody));
-    if (current) render(current);
-  });
-  $("#togglePlain").addEventListener("click", (ev) => {
-    showPlain = !showPlain; ev.target.setAttribute("aria-pressed", String(showPlain));
-    if (current) render(current);
-  });
-  $("#toggleFigs").addEventListener("click", (ev) => {
-    showFigs = !showFigs; ev.target.setAttribute("aria-pressed", String(showFigs));
-    if (current) render(current);
-  });
-  $("#toggleTables").addEventListener("click", (ev) => {
-    showTables = !showTables; ev.target.setAttribute("aria-pressed", String(showTables));
-    if (current) render(current);
-  });
-  setupTooltip();
-  setupFigureFallback();
-  setupFigureFetch();
-  load(pick.value);
-}
-init();
-</script>
+<script type="module" src="/app.js"></script>
 </body>
 </html>

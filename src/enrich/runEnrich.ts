@@ -33,7 +33,7 @@ import { batchUnits, collectUnits, type EnrichUnit } from "./units.js";
 import { dirFor, readDirs, rootForArticle } from "../paths.js";
 
 
-const DEFAULT_MODEL = "claude-opus-5";
+export const DEFAULT_MODEL = "claude-opus-5";
 
 interface TotalUsage {
   inputTokens: number;
@@ -43,7 +43,7 @@ interface TotalUsage {
 }
 
 /** $/1M トークン。表に無いモデルはトークン数だけ出してコストは伏せる。 */
-const PRICES: Record<string, { in: number; out: number }> = {
+export const PRICES: Record<string, { in: number; out: number }> = {
   "claude-opus-5": { in: 5, out: 25 },
   "claude-sonnet-5": { in: 3, out: 15 },
   "claude-haiku-4-5": { in: 1, out: 5 },
@@ -240,7 +240,7 @@ function parseArgs(argv: string[]): Args {
  * Node の loadEnvFile は**既に export 済みの変数を上書きしない**。
  * 一時的に別のキーで動かしたいときは環境変数のほうが勝つ。
  */
-function loadDotEnv(): { file: string | null; fromShell: boolean } {
+export function loadDotEnv(): { file: string | null; fromShell: boolean } {
   const fromShell = Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
   const p = resolve(".env");
   if (!existsSync(p)) return { file: null, fromShell };

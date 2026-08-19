@@ -4,8 +4,9 @@
     {
       "name": "viewer",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "serve"],
-      "port": 5173
+      "runtimeArgs": ["run", "serve", "--", "--port", "5199"],
+      "port": 5199,
+      "autoPort": false
     }
   ]
 }

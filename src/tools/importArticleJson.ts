@@ -34,6 +34,15 @@
  * <back><ref-list> を作り、本文の `[ 1 ]` `[ 4 , 5 ]` を xref に変える。
  * **どちらのファイルかは形で見分ける** (sections があれば本文、records が
  * あれば文献) ので、順番も --flag も要らない。
+ *
+ * ## Markdown のパイプ表は <table-wrap> にする
+ *
+ * 抽出元は表を Markdown (`| a | b |` + `| --- | --- |`) の**複数行文字列**として
+ * 段落に入れてくる。これを <p> に潰すと改行が消えて行境界が永久に失われる
+ * (`| |` が「行の継ぎ目」か「空セル」か区別できなくなる)。段落を <p> にする
+ * **前に**表を検出し、<table-wrap> に変える。直前の段落が `Table N .` なら
+ * label / caption として取り込み、本文中の `Table N` への言及は
+ * `<xref ref-type="table">` にする (ビューアが表を参照段落の直後に置ける)。
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
@@ -144,12 +153,137 @@ function withXrefs(text: string, known: Set<number>): string {
   });
 }
 
-/** 段落を <p> にする。空行と、抽出時に残った制御文字は落とす。 */
-function paragraphs(list: string[] | undefined, known: Set<number>): string[] {
-  return (list ?? [])
-    .map((p) => p.replace(/\s+/g, " ").trim())
-    .filter((p) => p.length > 0)
-    .map((p) => `      <p>${withXrefs(esc(p), known)}</p>`);
+const collapse = (s: string) => s.replace(/\s+/g, " ").trim();
+
+/* ------------------------------------------------------------------ *
+ * Markdown のパイプ表
+ * ------------------------------------------------------------------ */
+
+interface MdTable {
+  rows: string[][];
+  /** 区切り行 (`| --- |`) より上の行数。markdown の意味論では見出し行。 */
+  headerRows: number;
+}
+
+/**
+ * Markdown のパイプ表を行列に読む。表でなければ null。
+ *
+ * 判定は保守的にする — **全行がパイプで囲まれ、区切り行がある**ものだけ。
+ * 改行はここで使い切る (これより後の処理は空白を潰すので、行境界は
+ * この時点でしか取れない)。
+ */
+function parseMdTable(text: string): MdTable | null {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (lines.length < 2) return null;
+  if (!lines.every((l) => l.startsWith("|") && l.endsWith("|"))) return null;
+
+  const grid = lines.map((l) => l.slice(1, -1).split("|").map(collapse));
+  const isSep = (r: string[]) => r.length > 0 && r.every((c) => /^:?-{2,}:?$/.test(c));
+  const sepAt = grid.findIndex(isSep);
+  if (sepAt < 0) return null;
+
+  const rows = grid.filter((r) => !isSep(r));
+  return rows.length > 0 ? { rows, headerRows: sepAt } : null;
+}
+
+/** 直前の段落を表のキャプションとみなせるか。"Table 1 . Summary of ..." */
+const TABLE_CAPTION = /^Table\s+(\d+)\s*[.:]?\s*(.*)$/i;
+
+/**
+ * キャプション番号が取れた表の番号を、本文の xref 用に先に集める。
+ * (段落を出力する時点で「その番号の表が存在するか」を知る必要がある)
+ */
+function collectTableNums(sections: InputSection[]): Set<number> {
+  const nums = new Set<number>();
+  const walk = (list: InputSection[]) => {
+    for (const s of list) {
+      const raw = (s.paragraphs ?? []).filter((p) => collapse(p).length > 0);
+      for (let i = 1; i < raw.length; i++) {
+        if (!parseMdTable(raw[i])) continue;
+        const m = TABLE_CAPTION.exec(collapse(raw[i - 1]));
+        if (m) nums.add(Number(m[1]));
+      }
+      walk(s.subsections ?? []);
+    }
+  };
+  walk(sections);
+  return nums;
+}
+
+/** 本文中の `Table N` への言及を xref にする (実在する表の番号だけ)。 */
+function withTableXrefs(text: string, tableNums: Set<number>): string {
+  if (tableNums.size === 0) return text;
+  return text.replace(/\bTable\s+(\d+)\b/g, (whole, n: string) =>
+    tableNums.has(Number(n))
+      ? `<xref ref-type="table" rid="tbl${Number(n)}">${whole}</xref>`
+      : whole,
+  );
+}
+
+function tableWrapXml(t: MdTable, id: string, label?: string, caption?: string): string {
+  const pad = "      ";
+  const row = (cells: string[]) =>
+    `${pad}    <tr>${cells.map((c) => (c ? `<td>${esc(c)}</td>` : "<td/>")).join("")}</tr>`;
+  const head =
+    t.headerRows > 0
+      ? [`${pad}  <thead>`, ...t.rows.slice(0, t.headerRows).map(row), `${pad}  </thead>`]
+      : [];
+  const body = [`${pad}  <tbody>`, ...t.rows.slice(t.headerRows).map(row), `${pad}  </tbody>`];
+  return [
+    `${pad}<table-wrap id="${id}">`,
+    label ? `${pad}  <label>${esc(label)}</label>` : "",
+    caption ? `${pad}  <caption><p>${esc(caption)}</p></caption>` : "",
+    `${pad}  <table>`,
+    ...head,
+    ...body,
+    `${pad}  </table>`,
+    `${pad}</table-wrap>`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * 段落の列をブロック (<p> と <table-wrap>) にする。
+ * 空行と、抽出時に残った制御文字は落とす。
+ */
+function paragraphs(
+  list: string[] | undefined,
+  known: Set<number>,
+  tableNums: Set<number>,
+  counter: { n: number },
+): string[] {
+  const raw = (list ?? []).filter((p) => collapse(p).length > 0);
+  const out: string[] = [];
+  let prevWasPlain = false;
+  for (let i = 0; i < raw.length; i++) {
+    const t = parseMdTable(raw[i]);
+    if (!t) {
+      out.push(`      <p>${withTableXrefs(withXrefs(esc(collapse(raw[i])), known), tableNums)}</p>`);
+      prevWasPlain = true;
+      continue;
+    }
+    // 直前の段落が "Table N ." ならキャプションとして表に取り込む (段落からは外す)
+    let label: string | undefined;
+    let caption: string | undefined;
+    let num: number | undefined;
+    if (prevWasPlain) {
+      const m = TABLE_CAPTION.exec(collapse(raw[i - 1]));
+      if (m) {
+        out.pop();
+        label = `Table ${m[1]}`;
+        caption = m[2] || undefined;
+        num = Number(m[1]);
+      }
+    }
+    counter.n++;
+    out.push(tableWrapXml(t, num !== undefined ? `tbl${num}` : `tblx${counter.n}`, label, caption));
+    prevWasPlain = false;
+  }
+  return out;
 }
 
 /**
@@ -219,18 +353,25 @@ function refXml(r: RefRecord): string {
   return lines.filter((l) => l !== "").join("\n");
 }
 
-function sectionXml(s: InputSection, known: Set<number>, depth = 3): string {
+interface XmlCtx {
+  known: Set<number>;
+  tableNums: Set<number>;
+  counter: { n: number };
+}
+
+function sectionXml(s: InputSection, ctx: XmlCtx, depth = 3): string {
   const pad = "  ".repeat(depth);
   const title = s.title ? `${pad}  <title>${esc(s.title)}</title>\n` : "";
   // sec-type は分類のヒントとして渡す。最終的な種別は classifySection が決める。
   const type = s.type && s.type !== "other" ? ` sec-type="${esc(s.type)}"` : "";
-  const body = paragraphs(s.paragraphs, known).join("\n");
-  const subs = (s.subsections ?? []).map((x) => sectionXml(x, known, depth + 1)).join("\n");
+  const body = paragraphs(s.paragraphs, ctx.known, ctx.tableNums, ctx.counter).join("\n");
+  const subs = (s.subsections ?? []).map((x) => sectionXml(x, ctx, depth + 1)).join("\n");
   return `${pad}<sec${type}>\n${title}${body}${subs ? "\n" + subs : ""}\n${pad}</sec>`;
 }
 
 function toJats(input: Input, records: RefRecord[]): string {
   const known = new Set(records.map((r) => r.index));
+  const ctx: XmlCtx = { known, tableNums: collectTableNums(input.sections ?? []), counter: { n: 0 } };
   const all = input.sections ?? [];
   const abstracts = all.filter((s) => s.type === "abstract" || /^abstract$/i.test(s.title ?? ""));
   const body = all.filter((s) => !abstracts.includes(s));
@@ -246,7 +387,10 @@ function toJats(input: Input, records: RefRecord[]): string {
   });
 
   const abstractXml = abstracts
-    .map((s) => `      <abstract>\n${paragraphs(s.paragraphs, known).join("\n")}\n      </abstract>`)
+    .map(
+      (s) =>
+        `      <abstract>\n${paragraphs(s.paragraphs, ctx.known, ctx.tableNums, ctx.counter).join("\n")}\n      </abstract>`,
+    )
     .join("\n");
 
   const backXml = records.length
@@ -271,7 +415,7 @@ function toJats(input: Input, records: RefRecord[]): string {
     `    </article-meta>`,
     `  </front>`,
     `  <body>`,
-    body.map((s) => sectionXml(s, known)).join("\n"),
+    body.map((s) => sectionXml(s, ctx)).join("\n"),
     `  </body>`,
     backXml,
     `</article>`,
@@ -311,6 +455,7 @@ function main(): void {
     著者: article.authors?.length ?? 0,
     文献: records.length,
     引用: (xml.match(/<xref /g) ?? []).length,
+    表: (xml.match(/<table-wrap /g) ?? []).length,
   };
   console.log(`入力  ${args.files.join("\n      ")}`);
   console.log(`      ${article.title ?? "(タイトルなし)"}`);
