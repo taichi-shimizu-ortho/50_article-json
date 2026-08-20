@@ -38,9 +38,12 @@
   #pickLabel { display: flex; align-items: center; gap: 6px; flex: 1 1 260px; min-width: 0; }
   #pickLabel select { flex: 1; min-width: 0; }
   button { cursor: pointer; }
-  button:disabled { cursor: default; opacity: .55; }
+  button:disabled { cursor: not-allowed; opacity: .55; }
   button[aria-pressed="true"] { background: var(--accent); color: var(--panel); border-color: var(--accent); }
   button.primary { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+  /* 読み上げの状態。スクリーンリーダーにも読ませる (aria-live) ので、
+     見えている文字列がそのまま読み上げの通知になる。 */
+  .tts-status { color: var(--muted); font-size: 12px; flex: 1 1 180px; min-width: 0; }
   .legend { color: var(--muted); font-size: 12px; margin-left: auto; }
   .legend i { font-style: normal; border-bottom: 2px solid; padding-bottom: 1px; margin-left: 10px; }
   /* ヘッダーの進捗チップ (バックグラウンドのダウンロードなど) */
@@ -236,14 +239,17 @@
   <button id="toggleTables" aria-pressed="true">Tables</button>
   <button id="getFigs" title="この論文の図版を PMC から data/figures/ に保存する">Fetch figures</button>
   <button id="enrichBtn" title="この論文に LLM 要約・断定度を付与する (API 課金あり)">Enrich…</button>
-  <button id="readBtn" title="このページから最後まで読み上げる (もう一度押すと停止)">▶ Read</button>
+  <button id="ttsPlay" type="button" title="このページから最後まで US English で読み上げる">Read aloud</button>
+  <button id="ttsPause" type="button" aria-pressed="false" disabled>Pause</button>
+  <button id="ttsStop" type="button" disabled>Stop</button>
   <select id="readRate" title="読み上げ速度">
     <option value="0.8">0.8×</option>
-    <option value="1" selected>1×</option>
+    <option value="0.95" selected>0.95×</option>
     <option value="1.2">1.2×</option>
     <option value="1.5">1.5×</option>
     <option value="2">2×</option>
   </select>
+  <span class="tts-status" id="ttsStatus" role="status" aria-live="polite"></span>
   <span id="jobchip"></span>
   <span class="legend" id="legend"></span>
 </header>

@@ -502,7 +502,10 @@ function renderPage() {
 
   out.innerHTML = html + pagerHtml();
   renderToc();
-  window.scrollTo(0, 0);
+  // 読み上げ中のページ送りでも呼ばれるので、ハイライトを描き直す
+  if (reading) highlightSpeaking(reading.units[reading.idx - 1]?.pid ?? null);
+  else window.scrollTo(0, 0);
+  updateTtsControls();
   $("#pgPrev")?.addEventListener("click", () => setPage(pageIdx - 1));
   $("#pgNext")?.addEventListener("click", () => setPage(pageIdx + 1));
 
@@ -538,7 +541,7 @@ function showArticleView() {
   main.classList.remove("wide");
   $("#getFigs").disabled = false;
   $("#enrichBtn").disabled = false;
-  if (synth) $("#readBtn").disabled = false;
+  updateTtsControls();
 }
 
 async function loadArticle(id, idx) {
@@ -621,7 +624,7 @@ async function showLibrary() {
   main.classList.add("wide");
   $("#getFigs").disabled = true;
   $("#enrichBtn").disabled = true;
-  $("#readBtn").disabled = true;
+  updateTtsControls();
   out.innerHTML = '<p class="empty">Loading…</p>';
   await fetchCorpus();
   renderLibrary();
@@ -912,14 +915,19 @@ function setupEnrich() {
  * 読み上げ (Web Speech API)
  *
  * 2 系統ある:
- *   - ヘッダの ▶ Read … 現在のページの先頭から**最後のセクションまで**連続で
- *     読む。ページはついてくる (自動でめくり、読んでいる段落をハイライト)。
- *     最初から読みたいときは Abstract ページに移ってから押す。
+ *   - ヘッダの Read aloud … 現在のページの先頭から**最後のセクションまで**
+ *     連続で読む。ページはついてくる (自動でめくり、読んでいる段落を
+ *     ハイライト)。最初から読みたいときは Abstract ページで押す。
+ *     Pause / Resume / Stop で操作する。
  *   - 段落の 🔊 … その段落だけ読む。読んでいる段落でもう一度押すと止まる。
+ *
+ * **音声は Google US English を名指しで優先する。** Chrome はこの音声を
+ * 音声一覧で公開していて、手元の OS 音声より読みが安定している。入っていない
+ * 端末のために en-US → en と落とす。テキストがブラウザの外に出ることはない。
  *
  * **文単位で utterance を分ける。** Chrome は長い utterance を数十秒で
  * 黙って打ち切ることがある (既知の挙動)。文分割は JSON の sentences から
- * もらえるので、それをそのまま単位にする。無い段落は段落ごと 1 発話。
+ * もらえるので、それをそのまま単位にし、それでも長い文は語境界で割る。
  *
  * 停止と競合は token で守る。cancel() は保留中の utterance に onend/onerror を
  * 発火させるので、古い発話からの「次へ」が新しい再生に混ざらないようにする。
@@ -930,23 +938,88 @@ let reading = null;   // { units, idx } 再生中だけ非 null
 let readToken = 0;    // 世代番号。stopSpeech のたびに進める
 let paraLoc = new Map(); // pid -> { p, page } (段落 🔊 用)
 let enVoice;          // 選んだ英語音声 (undefined = 未探索, null = 見つからず)
+let errorStreak = 0;  // 連続で失敗した utterance の数
+/**
+ * 一時停止しているか。**synth.paused を直接見ない** — pause() を呼んだ直後に
+ * 読んでも false のままの実装があり (反映が非同期)、ボタンのラベルが
+ * "Pause" のまま固まって再開の手段が画面から消える。こちらの意図を持つ。
+ */
+let speechPaused = false;
 
-/** 本文は英語なので en を明示する。既定音声が日本語の環境で化けないように。 */
-function pickVoice() {
+/** 1 発話の上限。Chrome は長い utterance を黙って打ち切ることがある。 */
+const MAX_UTTERANCE = 240;
+
+/** 立て続けにこれだけ失敗したら諦める (無音のまま延々進むのを防ぐ)。 */
+const MAX_ERROR_STREAK = 3;
+
+function speechAvailable() {
+  return Boolean(synth) && "SpeechSynthesisUtterance" in window;
+}
+
+/**
+ * 使う音声。**Google US English を名指しで優先する。**
+ * 無ければ en-US、それも無ければ英語なら何でも。1 つも無ければ null を返して
+ * utterance.lang = "en-US" に任せる (既定音声が日本語の環境で化けないように)。
+ */
+function preferredVoice() {
   if (enVoice !== undefined) return enVoice;
   const vs = synth?.getVoices() ?? [];
-  if (!vs.length) return undefined; // まだロード中。utterance.lang に任せる
+  if (!vs.length) return undefined; // まだロード中。次の発話で選び直す
   enVoice =
-    vs.find((v) => v.lang === "en-US" && v.localService) ??
-    vs.find((v) => v.lang.startsWith("en")) ?? null;
+    vs.find((v) => v.name === "Google US English") ??
+    vs.find((v) => /google.*us english/i.test(v.name)) ??
+    vs.find((v) => /^en-US$/i.test(v.lang)) ??
+    vs.find((v) => /^en[-_]?US/i.test(v.lang)) ??
+    vs.find((v) => /^en/i.test(v.lang)) ??
+    null;
   return enVoice;
 }
 
+function setTtsStatus(message) {
+  $("#ttsStatus").textContent = message;
+}
+
+/** ボタンの活殺とラベル。再生中かどうかと paused でしか変わらない。 */
+function updateTtsControls() {
+  const ok = speechAvailable();
+  const inArticle = ok && view === "article" && Boolean(current);
+  const paused = Boolean(reading) && speechPaused;
+  $("#ttsPlay").disabled = !inArticle || Boolean(reading);
+  $("#ttsPause").disabled = !reading;
+  $("#ttsStop").disabled = !reading;
+  $("#readRate").disabled = !ok;
+  $("#ttsPause").textContent = paused ? "Resume" : "Pause";
+  $("#ttsPause").setAttribute("aria-pressed", String(paused));
+}
+
+/**
+ * 長すぎる文を語境界で割る。**文の切れ目を優先し、足りないときだけ割る** —
+ * 途中で切ると抑揚が崩れるので、上限を超える文にしか適用しない。
+ */
+function splitLong(text, max = MAX_UTTERANCE) {
+  const t = String(text ?? "").replace(/\s+/g, " ").trim();
+  if (!t) return [];
+  if (t.length <= max) return [t];
+  const out = [];
+  let chunk = "";
+  for (const word of t.split(" ")) {
+    if (chunk && `${chunk} ${word}`.length > max) {
+      out.push(chunk);
+      chunk = word;
+    } else {
+      chunk = chunk ? `${chunk} ${word}` : word;
+    }
+  }
+  if (chunk) out.push(chunk);
+  return out;
+}
+
 function paragraphUnit(p, page) {
-  const parts = (p.sentences ?? [])
-    .map((s) => p.text.slice(s.span[0], s.span[1]).trim())
-    .filter(Boolean);
-  return { parts: parts.length ? parts : [p.text], page, pid: p.id };
+  const sentences = (p.sentences ?? [])
+    .map((s) => p.text.slice(s.span[0], s.span[1]))
+    .filter((t) => t.trim());
+  const source = sentences.length ? sentences : [p.text];
+  return { parts: source.flatMap((t) => splitLong(t)), page, pid: p.id };
 }
 
 /** ページ順の読み上げ単位 (セクション見出し + 段落)。図表・References は読まない。 */
@@ -954,19 +1027,19 @@ function speechUnits() {
   const units = [];
   const collect = (secs, page) => {
     for (const s of secs) {
-      if (s.title) units.push({ parts: [s.title], page, pid: null });
+      if (s.title) units.push({ parts: splitLong(s.title), page, pid: null });
       for (const p of s.paragraphs) units.push(paragraphUnit(p, page));
       collect(s.sections, page);
     }
   };
   pages.forEach((page, i) => {
     if (page.kind === "overview") {
-      if (current.meta.title) units.push({ parts: [current.meta.title], page: i, pid: null });
+      if (current.meta.title) units.push({ parts: splitLong(current.meta.title), page: i, pid: null });
       collect(current.abstract, i);
     } else if (page.kind === "section") collect([page.section], i);
     else if (page.kind === "back") collect(page.sections, i);
   });
-  return units;
+  return units.filter((u) => u.parts.length);
 }
 
 /** 段落 id → 段落とページ。🔊 のクリックから段落オブジェクトを引く。 */
@@ -995,29 +1068,42 @@ function highlightSpeaking(pid) {
   }
 }
 
-function stopSpeech() {
+/**
+ * 止める。**cancel の前に resume する** — Chrome は一時停止中に cancel すると
+ * 停止状態が残り、次の speak が鳴らないまま無反応になることがある。
+ */
+function stopSpeech(silent = false) {
+  const wasReading = Boolean(reading);
   readToken++;
   reading = null;
-  synth?.cancel();
+  errorStreak = 0;
+  if (synth) {
+    // **cancel の前に resume する。** 一時停止中に cancel すると停止状態が
+    // 残り、次の speak が鳴らないまま無反応になる実装がある。
+    if (speechPaused || synth.paused) synth.resume();
+    synth.cancel();
+  }
+  speechPaused = false;
   highlightSpeaking(null);
-  const btn = $("#readBtn");
-  btn.textContent = "▶ Read";
-  btn.removeAttribute("aria-pressed");
+  if (!silent && wasReading) setTtsStatus("Reading stopped.");
+  updateTtsControls();
 }
 
 function speakFrom(units, idx) {
-  stopSpeech();
-  if (!synth || !units.length) return;
+  stopSpeech(true);
+  if (!speechAvailable() || !units.length) return;
   reading = { units, idx };
-  const btn = $("#readBtn");
-  btn.textContent = "⏹ Stop";
-  btn.setAttribute("aria-pressed", "true");
+  updateTtsControls();
   advanceSpeech(readToken);
 }
 
 function advanceSpeech(token) {
   if (token !== readToken || !reading) return;
-  if (reading.idx >= reading.units.length) return stopSpeech();
+  if (reading.idx >= reading.units.length) {
+    stopSpeech(true);
+    setTtsStatus("Finished reading.");
+    return;
+  }
   const u = reading.units[reading.idx++];
   if (view === "article" && u.page !== pageIdx) setPage(u.page, { fromSpeech: true });
   highlightSpeaking(u.pid);
@@ -1028,36 +1114,67 @@ function advanceSpeech(token) {
     if (i >= u.parts.length) return advanceSpeech(token);
     const utt = new SpeechSynthesisUtterance(u.parts[i++]);
     utt.lang = "en-US";
-    const v = pickVoice();
-    if (v) utt.voice = v;
+    const voice = preferredVoice();
+    if (voice) utt.voice = voice;
     utt.rate = Number($("#readRate").value) || 1;
+    utt.onstart = () => {
+      errorStreak = 0;
+      setTtsStatus(`Reading with ${voice?.name ?? "an English (US) voice"}.`);
+    };
     utt.onend = next;
-    utt.onerror = next; // 1 文の失敗で全体を止めない (cancel 由来は token で弾ける)
+    utt.onerror = (ev) => {
+      // cancel 由来は token で弾ける。ここに来るのは本当の失敗だけ。
+      // **1 文の失敗で全体を止めない** — ただし連続するなら鳴っていないので諦める。
+      if (token !== readToken) return;
+      if (++errorStreak >= MAX_ERROR_STREAK) {
+        stopSpeech(true);
+        setTtsStatus(`Could not continue reading (${ev.error ?? "speech error"}).`);
+        return;
+      }
+      next();
+    };
     synth.speak(utt);
   };
   next();
 }
 
+function toggleSpeechPause() {
+  if (!reading) return;
+  if (speechPaused) {
+    speechPaused = false;
+    synth.resume();
+    setTtsStatus("Reading resumed.");
+  } else {
+    speechPaused = true;
+    synth.pause();
+    setTtsStatus("Reading paused.");
+  }
+  updateTtsControls();
+}
+
 function setupSpeech() {
-  const btn = $("#readBtn");
-  if (!synth) {
-    btn.disabled = true;
-    btn.title = "このブラウザは音声合成 (speechSynthesis) に対応していません";
-    $("#readRate").disabled = true;
+  if (!speechAvailable()) {
+    for (const id of ["#ttsPlay", "#ttsPause", "#ttsStop", "#readRate"]) $(id).disabled = true;
+    setTtsStatus("Text-to-speech is not available in this browser.");
     return;
   }
   // 音声一覧は非同期に届く環境がある。届いたら選び直す。
-  synth.addEventListener?.("voiceschanged", () => { enVoice = undefined; });
+  synth.addEventListener?.("voiceschanged", () => {
+    enVoice = undefined;
+    updateTtsControls();
+  });
 
-  btn.addEventListener("click", () => {
-    if (reading) return stopSpeech();
+  $("#ttsPlay").addEventListener("click", () => {
     if (!current || view !== "article") return;
     const units = speechUnits();
-    // 現在のページの先頭から。References などの読まないページにいたら先頭から。
+    if (!units.length) return setTtsStatus("There is no article text to read.");
+    // 現在のページの先頭から。読まないページ (References など) にいたら先頭から。
     let start = units.findIndex((x) => x.page >= pageIdx);
     if (start < 0) start = 0;
     speakFrom(units, start);
   });
+  $("#ttsPause").addEventListener("click", toggleSpeechPause);
+  $("#ttsStop").addEventListener("click", () => stopSpeech());
 
   // 速度変更は次の文から効く。再生成はしない (今の文を言い切ってから変わる)。
 
@@ -1073,6 +1190,9 @@ function setupSpeech() {
     const loc = paraLoc.get(pid);
     if (loc) speakFrom([paragraphUnit(loc.p, loc.page)], 0);
   });
+
+  setTtsStatus("Ready to read aloud in US English.");
+  updateTtsControls();
 }
 
 /* ================================================================== *
